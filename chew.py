@@ -1,3 +1,4 @@
+# -*- coding: iso-8859-1 -*-
 
 import sys, string, math, operator, re, os, urllib
 import gazette        
@@ -22,7 +23,8 @@ use_concept_net = 0
 use_gazette = 0
 use_frequencies = 1
 use_topic_map = 0
-    
+
+DESCENDING = 0
 COMPOUND_SCORE_FACTOR = 0.6
 REPORT_TERMS = 40
 REPORT_LOWEST = 0.03
@@ -553,7 +555,10 @@ def rate_terms(text):
 
         term = lang.clean_term(term)
         t = terms.get_term(term, stem)
-        t.found(high - math.log(ix))
+        if DESCENDING:
+            t.found(high - math.log(ix))
+        else:
+            t.found(1)
 
         if use_gazette:
             tracker.track(t, term)

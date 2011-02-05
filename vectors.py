@@ -1,3 +1,7 @@
+"""
+Vector processing API.
+$Id: vectors.py,v 1.2 2008/12/04 12:29:57 lars.garshol Exp $
+"""
 
 import math, chew, string, langmodules
 
