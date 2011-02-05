@@ -1,0 +1,33 @@
+$def with (feeds)
+
+<link rel=stylesheet type="text/css" href="static/style.css">
+
+<title>What's up - Sites</title>
+<h1>Sites</h1>
+
+<table>
+$ ix = 0
+$for site in feeds:
+    $ klass = ""
+    $ id = site.get_local_id()
+    $if site.get_error():
+        $ klass = "class=error"
+    <tr $klass>
+    <td><a href="/delete-site/$id"><img src=static/read.png></a>
+    <td><a href="site/$id">$(site.get_title())</a>
+    <td>$(len(site.get_items()))
+    <td>$(site.get_unread_count())
+    <td>$(site.get_ratio())
+    <td>$(int(site.time_since_last_read()))
+    <td>$(site.is_being_read())
+    $ ix += 1
+</table>
+
+<p><form method=post action="/addfeed">
+Feed URL: <input type=text name=url size=50><br>
+Format: <select name=format>
+  <option>RSS</option>
+  <option>Atom</option>
+</select>
+<input type=submit value="Add">
+</form>

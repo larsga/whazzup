@@ -1,0 +1,51 @@
+$def with (feed)
+
+<style>td { vertical-align: top }</style>
+
+<title>Site: $(feed.get_title())</title>
+<h1>Site: $(feed.get_title())</h1>
+
+<form method=post action=/update-site/$(feed.get_local_id())>
+<table>
+<tr><th>Homepage <td>$(feed.get_link())
+<tr><th>Feed URL <td><input name=feedurl value="$(feed.get_url())" size=80>
+<tr><th>Time to wait <td><input name=time value=$(feed.get_time_to_wait())>
+
+<tr><td colspan=2><input type=submit value="Set">
+</table>
+</form>
+        
+<table>
+$ ix = 1
+$for item in feed.get_items():
+    <tr><td>$(ix).
+    $if item.is_seen():
+        $ t = "<i>"
+        $ te = "</i>"
+    $else:
+        $ t = ""
+        $ te = ""
+
+    $ id = item.get_local_id()
+    $if not item.is_seen():
+        $ votebutton = '<td><a href="/vote/%s/%s"><img src=/static/%s.png></a>'
+    $else:
+        $ votebutton = '<td><!-- %s %s %s -->'
+          
+    $:(votebutton % ("up", id, "up"))
+    <td><a href="/faveform/$(id)"><img src=/static/star.png></a>
+    <td>$:t<a href="$(item.get_link())">$(item.get_title())</a>$:te
+
+    <tr><td>
+    $:(votebutton % ("down", id, "down"))
+    $:(votebutton % ("read", id, "read"))
+    <td style="font-size: 80%; color: gray">
+    $(item.get_site().get_title())
+    $if item.get_author():
+         , $(item.get_author())
+    <a href="/item/$(item.get_local_id())" style="color: inherit">[*]</a>
+    $ ix += 1
+                        
+</table>
+$if feed.get_error():
+    <pre>$(feed.get_error())</pre>

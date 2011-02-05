@@ -1,0 +1,30 @@
+$def with (item, string, math, feeddb)
+
+<style>
+th { text-align: left }
+</style>
+<h1>$(item.get_title())</h1>
+<p>$(item.get_site().get_title())
+$if item.get_author():
+    , $(item.get_author())
+
+<p>$:(item.get_description())</p>
+
+<table>
+<tr><th>Site prob <td>$item.get_site_probability()
+<tr><th>Word prob <td>$item.get_word_probability()
+<tr><th>Author prob <td>$item.get_author_probability()
+<tr><th>Overall prob <td>$item.get_overall_probability()
+<tr><th>Pub date <td>$item.get_pubdate()
+<tr><th>Age <td>$item.get_age()
+<tr><th>Age factor <td>$(math.log(math.log(item.get_age())))
+<tr><th>Points <td>$item.get_points()
+$if not item.is_seen():
+    <tr><th>Position <td>$(feeddb.get_no_of_item(item))
+<tr><th>URL <td>$item.get_link()
+<tr><th>GUID <td>$item.get_guid()
+$ site = item.get_site()
+<tr><th>Feed <td><a href="/site/$(site.get_local_id())">$(site.get_title())</a>
+</table>
+
+<p>$(item.get_word_tokens())
