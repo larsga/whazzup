@@ -1,0 +1,14 @@
+body { font-family: Arial }
+td { vertical-align: top;
+     padding-right: 0.6em }
+a { text-decoration: none }
+
+div.health {
+    float: right;
+    border: solid black 1pt;
+    padding: 4pt;
+}
+
+tr.error, tr.error a {
+    color: red;
+}
