@@ -1,4 +1,4 @@
-import time, string, math, rsslib, sys, feedlib
+import time, string, math, rsslib, sys, feedlib, queuebased
 from xml.sax import SAXException
     
 import web
@@ -102,6 +102,7 @@ class Vote:
         link = feeddb.get_item_by_id(int(id))
         ix = feeddb.get_no_of_item(link)
         link.record_vote(vote)
+        queuebased.recalculate_all_posts() # since scores have changed
         web.seeother("/%s" % (ix / 25))
 
 class ShowItem:

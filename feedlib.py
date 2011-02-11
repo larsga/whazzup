@@ -52,6 +52,7 @@ class Feed(rsslib.SiteSummary):
         self._being_read = 0
         self._time_to_wait = TIME_TO_WAIT # specified in seconds
         self._error = None
+        self._task_in_queue = False # whether there is a check task in queue
 
     def get_title(self):
         return rsslib.SiteSummary.get_title(self) or "[No title]"
@@ -117,6 +118,12 @@ class Feed(rsslib.SiteSummary):
             if not feeddb.is_link_seen(item.get_guid()):
                 count += 1
         return count
+
+    def has_check_task(self):
+        return self._task_in_queue
+
+    def set_check_task(self, state):
+        self._task_in_queue = state
 
 class Link(rsslib.Item):
 
@@ -244,7 +251,7 @@ class Link(rsslib.Item):
             feeddb.commit()
             
         feeddb.seen_link(self.get_guid())
-        feeddb.recalculate()
+        # the UI takes care to queue a recalculation task
 
     def get_url_tokens(self):
         tokens = self.get_link().split("/")
@@ -402,6 +409,14 @@ class FeedDatabase(rsslib.FeedRegistry):
         finally:
             self._lock.release()
 
+    def sort(self):
+        try:
+            self._lock.acquire()
+            self._items = sort(self._items, Link.get_points)
+            self._items.reverse()
+        finally:
+            self._lock.release()
+            
     def get_item_count(self):
         return len(self._items)
 
@@ -410,6 +425,9 @@ class FeedDatabase(rsslib.FeedRegistry):
 
     def get_item_by_id(self, id):
         return self._linkmap[id]
+
+    def get_items(self):
+        return self._items
 
     def get_no_of_item(self, item):
         try:
@@ -532,14 +550,14 @@ class FeedDatabase(rsslib.FeedRegistry):
                 oldsite.not_being_read()
                 oldsite.set_error(traceback.format_exc())
             traceback.print_exc()
-            return None # we didn't get any feed, so no point in continuing
+            return [] # we didn't get any feed, so no point in continuing
                 
         site.set_format(format) # just to make sure
 
         items = site.get_items()
         items.reverse() # go through them from the back to get
                         # right order when added to oldsite
-        
+        new_items = []
         try:
             try:
                 self._lock.acquire()
@@ -549,6 +567,7 @@ class FeedDatabase(rsslib.FeedRegistry):
                         # this particular item. so we move it across
                         item._site = oldsite
                         oldsite.add_item_to_front(item)
+                        new_items.append(item)
 
                     if not self._linkguidmap.has_key(item.get_guid()):
                         #print " ", (item.get_link() or "").encode("utf-8")
@@ -569,8 +588,8 @@ class FeedDatabase(rsslib.FeedRegistry):
             oldsite.set_error(None)
         else:
             site.now_read()
-        self.recalculate()
-        return site
+
+        return new_items
 
 class WhazzupFactory(rsslib.DefaultFactory):
 
