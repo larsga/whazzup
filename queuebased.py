@@ -4,23 +4,18 @@ queue-based approach to maintaining server state. Eventually all the
 code here will be folded into feedlib.
 """
 
-import Queue, time, feedlib, sys, traceback
+# ISSUES TO FIX:
+#  - thread dormant time is not set correctly
 
-# possible queued tasks:
-#   - (re)compute score for a post  OK
-#   - resort all posts
-#   - check a feed for new posts    OK
-#   - go through feed database looking for feeds which need to be rechecked OK
-#   - downvote a post
-#   - upvote a post
+import Queue, time, feedlib, sys, traceback
 
 # tasks have an optional time to execute. if the time is not set, the
 # task is executed immediately. the time to execute is used as the
 # priority. if no tasks in the queue are ready to be performed, the
 # worker thread sleeps for a second, then rechecks.
 
-# need to subclass the priority queue so that we can peek into it and
-# see whether the first task is ready to be performed.
+# have subclassed priority queue so that we can peek into it and see
+# whether the first task is ready to be performed.
 
 class PeekablePriorityQueue(Queue.PriorityQueue):
 
@@ -32,7 +27,9 @@ class PeekablePriorityQueue(Queue.PriorityQueue):
         return timetorun < time.time()
 
 def queue_worker():
+    global lasttick
     while True:
+        lasttick = time.time()
         if not queue.has_task_ready():
             time.sleep(1)
             continue
@@ -74,11 +71,12 @@ class CheckFeed:
 class FindFeedsToCheck:
 
     def perform(self):
-        found = False
         for feed in feedlib.feeddb.get_feeds():
             if feed.should_read() and not feed.has_check_task():
-                found = True
-                queue.put((0, CheckFeed(feed)))
+                when = 0
+                if feed.get_error():
+                    when = time.time() + 600
+                queue.put((when, CheckFeed(feed)))
                 feed.set_check_task(True)
 
         queue.put((time.time() + 60, self))
