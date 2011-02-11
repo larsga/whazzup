@@ -5,7 +5,7 @@ TIME_TO_WAIT = 3600 * 3 # 3 hours
 START_VOTES = 5
 CHECK_PERIOD = 100
 MAX_STORIES = 8000
-
+       
 # --- Utilities
         
 def html2text(str):
@@ -376,7 +376,7 @@ class FeedDatabase(rsslib.FeedRegistry):
         
     def recalculate(self):
         nowtime = time.time()
-        print "Time until recalc:", nowtime - self._last_recalc
+        print "Time since recalc:", nowtime - self._last_recalc
         if nowtime - self._last_recalc < 120:
             return
         self._last_recalc = nowtime
@@ -621,7 +621,7 @@ def get_feeds():
             feed.set_format(format)
             feeds.add_feed(feed)
 
-        start_feed_reader(feeds)
+        #start_feed_reader(feeds)
         return feeds
 
     except IOError, e:
@@ -629,16 +629,17 @@ def get_feeds():
             return wzfactory.make_feed_registry()
         raise e
 
-print "\n==================================================\nWE GOT IMPORTED\n=================================================="
+# print "\n==================================================\nWE GOT IMPORTED\n=================================================="
 wzfactory = WhazzupFactory()
+feeddb = get_feeds()
 
-thread = None
-for t in threading.enumerate():
-    if t.name == "FeedReader":
-        thread = t
-if not thread:
-    print "Starting thread"
-    feeddb = get_feeds()
-    thread = start_feed_reader(feeddb)
-else:
-    print "Thread already running, not starting"
+# thread = None
+# for t in threading.enumerate():
+#     if t.name == "FeedReader":
+#         thread = t
+# if not thread:
+#     print "Starting thread"
+#     feeddb = get_feeds()
+#     thread = start_feed_reader(feeddb)
+# else:
+#     print "Thread already running, not starting"
