@@ -43,16 +43,17 @@ def queue_worker():
             traceback.print_tb(sys.exc_info()[2])
         queue.task_done()
 
-class RecalculatePost:
+class RecalculatePosts:
 
-    def __init__(self, post):
-        self._post = post
+    def __init__(self, posts):
+        self._posts = posts
 
     def perform(self):
-        self._post.recalculate()
+        for post in self._posts:
+            post.recalculate()
 
     def __repr__(self):
-        return "[RecalculatePost %s]" % self._post.get_link()
+        return "[RecalculatePosts %s]" % len(self._posts)
         
 class CheckFeed:
 
@@ -61,8 +62,8 @@ class CheckFeed:
 
     def perform(self):
         new_posts = feedlib.feeddb.read_feed(self._feed.get_url())
-        for new_post in new_posts:
-            queue.put((0, RecalculatePost(new_post)))
+        if new_posts:
+            queue.put((0, RecalculatePosts(new_posts)))
         self._feed.set_check_task(False)
 
     def __repr__(self):
@@ -106,8 +107,9 @@ def recalculate_all_posts():
     # called when a post is voted on, so that the system knows it needs
     # to recalculate all posts.
     # FIXME: can currently create duplicate tasks (and duplicate recalc)
-    for post in feedlib.feeddb.get_items():
-        queue.put((0, RecalculatePost(post)))
+    posts = feedlib.feeddb.get_items()
+    if posts:
+        queue.put((0, RecalculatePosts(posts)))
 
 import threading
 thread = None

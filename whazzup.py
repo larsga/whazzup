@@ -121,8 +121,8 @@ class Reload:
         print "<h1>Reloaded</h1>"
         print "<pre>"
         new_posts = feeddb.init() # does a reload
-        for post in new_posts:
-            queuebased.queue.put((0, queuebased.RecalculatePost(new_post)))
+        if new_posts:
+            queuebased.queue.put((0, queuebased.RecalculatePosts(new_posts)))
         print "</pre>"
 
 class AddFeed:

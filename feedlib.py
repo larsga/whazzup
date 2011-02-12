@@ -513,11 +513,14 @@ class FeedDatabase(rsslib.FeedRegistry):
                 
         try:
             site = rsslib.read_feed(url, wzfactory)
-        except:
+        except Exception, e:
             if oldsite:
                 oldsite.not_being_read()
                 oldsite.set_error(traceback.format_exc())
-            traceback.print_exc()
+            if not isinstance(e, IOError):
+                traceback.print_exc()
+            else:
+                print "ERROR: ", e
             return [] # we didn't get any feed, so no point in continuing
                 
         items = site.get_items()
