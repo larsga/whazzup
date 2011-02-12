@@ -78,7 +78,7 @@ class TitledObject:
         self._descr = descr
 
     def set_pubdate(self, pubdate):
-        self._pubdate = pubdate
+        self._pubdate = pubdate.strip() # must remove ws to simplify parsing
 
 class SiteSummary(TitledObject):
     "Represents an RSS file."

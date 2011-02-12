@@ -168,7 +168,7 @@ class Link(rsslib.Item):
                         pass
 
                 if not self._date:
-                    print "CAN'T PARSE:", self.get_pubdate()
+                    print "CAN'T PARSE:", repr(self.get_pubdate())
                     self._date = time.gmtime()
             else:
                 self._date = time.gmtime()
