@@ -1,4 +1,4 @@
-import time, string, math, rsslib, sys, feedlib
+import time, string, math, rsslib, sys, feedlib, queuebased
 from xml.sax import SAXException
     
 import web
@@ -45,8 +45,8 @@ class List:
                            feeddb)             
 
     def get_thread_health(self):
-        wait = time.time() - feedlib.lastcheck
-        if wait < feedlib.CHECK_PERIOD * 2:
+        wait = time.time() - queuebased.lasttick
+        if wait < 120:
             return "Thread is OK (%s)" % int(wait)
         else:
             return 'Thread is dead (%s) <a href="/start-thread">restart</a>' % int(wait)
@@ -102,6 +102,8 @@ class Vote:
         link = feeddb.get_item_by_id(int(id))
         ix = feeddb.get_no_of_item(link)
         link.record_vote(vote)
+        if vote != "read":
+            queuebased.recalculate_all_posts() # since scores have changed
         web.seeother("/%s" % (ix / 25))
 
 class ShowItem:
@@ -118,7 +120,9 @@ class Reload:
         nocache()
         print "<h1>Reloaded</h1>"
         print "<pre>"
-        feeddb.init() # does a reload
+        new_posts = feeddb.init() # does a reload
+        for post in new_posts:
+            queuebased.queue.put((0, queuebased.RecalculatePost(new_post)))
         print "</pre>"
 
 class AddFeed:
