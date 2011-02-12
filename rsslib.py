@@ -10,7 +10,7 @@ $Id: rsslib.py,v 1.9 2010/06/08 16:19:57 larsga Exp $
 
 import string, urlparse
 from xml.sax import saxutils, make_parser
-from xml.sax.handler import feature_namespaces
+from xml.sax.handler import feature_namespaces, ContentHandler
 from saxtracker import SAXTracker
 
 try:
@@ -532,3 +532,38 @@ def read_atom(url, factory = DefaultFactory()):
     handler = AtomHandler(ss, factory)
     read_xml(url, handler)
     return ss
+
+# ==== FEED-AGNOSTIC LOADING
+
+def read_feed(url, factory = DefaultFactory()):
+    """Loads feed without knowing whether it's RSS or Atom by autodetecting
+    the format."""
+    ss = factory.make_site(url)
+    handler = AutoDetectingHandler(ss, factory)
+    read_xml(url, handler)
+    return ss
+
+class AutoDetectingHandler(ContentHandler):
+
+    def __init__(self, site, factory):
+        self._site = site
+        self._factory = factory
+        self._handler = None # need to auto-detect before we can install
+
+    def startElement(self, name, attrs):
+        if not self._handler:
+            if name == "feed":
+                self._handler = AtomHandler(self._site, self._factory)
+            elif name in ("rss", "rdf:RDF"):
+                self._handler = RSSHandler(self._site, self._factory)
+            else:
+                raise Exception("Unknown format: " + name)
+
+        self._handler.startElement(name, attrs)
+
+    def characters(self, data):
+        if self._handler:
+            self._handler.characters(data)
+        
+    def endElement(self, name):
+        self._handler.endElement(name)

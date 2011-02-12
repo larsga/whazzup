@@ -60,7 +60,7 @@ class CheckFeed:
         self._feed = feed
 
     def perform(self):
-        new_posts = feedlib.feeddb.read_feed(self._feed.get_url(), self._feed.get_format())
+        new_posts = feedlib.feeddb.read_feed(self._feed.get_url())
         for new_post in new_posts:
             queue.put((0, RecalculatePost(new_post)))
         self._feed.set_check_task(False)

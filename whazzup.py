@@ -128,18 +128,9 @@ class Reload:
 class AddFeed:
     def POST(self):
         url = string.strip(web.input().get("url"))
-        format = string.lower(string.strip(web.input().get("format")))
-
-        print "<p>Adding feed...</p>"
-        
-        print "<pre>"
-        feed = feeddb.read_feed(url, format)
-        if feed != None: # it's none if an exception is thrown
-            feeddb.add_feed(feed)
-        print "</pre>"
-        
-        print "<p>Feed added!</p>"
+        posts = feeddb.read_feed(url)
         feeddb.save()
+        return  "<p>Feed added, %s posts loaded</p>" % len(posts)
 
 class AddFave:
     def POST(self):        

@@ -375,8 +375,7 @@ class FeedDatabase(rsslib.FeedRegistry):
         new_posts = []
         for feed in self._feeds:
             url = feed.get_url()
-            #print url
-            new_posts += self.read_feed(url, feed.get_format())
+            new_posts += self.read_feed(url)
         return new_posts
         
     def sort(self):
@@ -449,14 +448,10 @@ class FeedDatabase(rsslib.FeedRegistry):
     def save(self):
         outf = open("feeds.txt", "w")
         for feed in self._feeds:
-            outf.write("%s | %s | %s\n" %
+            outf.write("%s | %s\n" %
                        (feed.get_url(),
-                        feed.get_time_to_wait(),
-                        feed.get_format()))
+                        feed.get_time_to_wait()))
         outf.close()
-        #outf = codecs.open("feeds.opml", "w", "utf-8")
-        #rsslib.write_opml(self._feeds, outf, "utf-8")
-        #outf.close()
 
     def get_vote_stats(self):
         up = 0
@@ -511,16 +506,13 @@ class FeedDatabase(rsslib.FeedRegistry):
 
     # internal stuff
 
-    def read_feed(self, url, format):
+    def read_feed(self, url):
         oldsite = self._feedurlmap.get(url)
         if oldsite:
             oldsite.being_read()
                 
         try:
-            if format == "rss":
-                site = rsslib.read_rss(url, wzfactory)
-            else:
-                site = rsslib.read_atom(url, wzfactory)
+            site = rsslib.read_feed(url, wzfactory)
         except:
             if oldsite:
                 oldsite.not_being_read()
@@ -528,8 +520,6 @@ class FeedDatabase(rsslib.FeedRegistry):
             traceback.print_exc()
             return [] # we didn't get any feed, so no point in continuing
                 
-        site.set_format(format) # just to make sure
-
         items = site.get_items()
         items.reverse() # go through them from the back to get
                         # right order when added to oldsite
@@ -563,6 +553,9 @@ class FeedDatabase(rsslib.FeedRegistry):
                 oldsite.set_link(site.get_link())
             oldsite.set_error(None)
         else:
+            # we might not have seen this feed before, in which case we add it
+            if not self._feedurlmap.has_key(url):
+                self.add_feed(site)
             site.now_read()
 
         return new_items
@@ -587,11 +580,10 @@ def get_feeds():
     try:
         feeds = wzfactory.make_feed_registry()
         for line in open("feeds.txt").readlines():
-            (url, time, format) = string.split(string.strip(line), " | ")
+            (url, time) = string.split(string.strip(line), " | ")
             time = int(time)
             feed = wzfactory.make_site(url)
             feed.set_time_to_wait(time)
-            feed.set_format(format)
             feeds.add_feed(feed)
 
         return feeds
