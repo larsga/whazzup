@@ -27,3 +27,9 @@ $for site in feeds:
 Feed URL: <input type=text name=url size=50><br>
 <input type=submit value="Add">
 </form>
+
+<p><form method=post enctype="multipart/form-data" action="/uploadopml">
+Import OPML feed list: <input type=file name=opml><br>
+<input type=submit value="Upload">
+</form>
+  

@@ -1,4 +1,4 @@
-import time, string, math, rsslib, sys, feedlib, queuebased
+import time, string, math, rsslib, sys, feedlib, queuebased, StringIO
 from xml.sax import SAXException
     
 import web
@@ -17,7 +17,8 @@ urls = (
     '/addfave', 'AddFave',
     '/shutdown', 'Shutdown',
     '/faveform/(\d*)', 'FaveForm',
-    '/recalc', 'Recalculate'
+    '/recalc', 'Recalculate',
+    '/uploadopml', 'ImportOPML'
     )
 
 def nocache():
@@ -73,7 +74,7 @@ class UpdateSite:
             feed.set_url(url)
         
         feeddb.save()
-        print "<p>Updated.</p>"
+        return "<p>Updated.</p>"
 
 class DeleteSite:
     def GET(self, id):
@@ -125,6 +126,22 @@ class Reload:
             queuebased.queue.put((0, queuebased.RecalculatePosts(new_posts)))
         print "</pre>"
 
+class ImportOPML:
+    def POST(self):
+        nocache()
+
+        thefile = web.input()["opml"]
+        inf = StringIO.StringIO(thefile)
+        feeds = rsslib.read_opml(inf)
+        inf.close()
+
+        for newfeed in feeds.get_feeds():
+            feed = feedlib.Feed(newfeed.get_url())
+            feeddb.add_feed(feed)
+        
+        feeddb.save()
+        return "<p>Imported.</p>"
+    
 class AddFeed:
     def POST(self):
         url = string.strip(web.input().get("url"))
