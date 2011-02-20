@@ -1,4 +1,4 @@
-import time, vectors, operator, string, dbm, math, formatmodules, HTMLParser, rsslib, sys, codecs, os, threading, traceback, cgi, chew
+import time, vectors, operator, string, dbm, math, formatmodules, HTMLParser, rsslib, sys, codecs, os, threading, traceback, cgi, chew, shelve
 from xml.sax import SAXException
 
 TIME_TO_WAIT = 3600 * 3 # 3 hours
@@ -124,27 +124,90 @@ class Feed(rsslib.SiteSummary):
     def set_check_task(self, state):
         self._task_in_queue = state
 
-class Link(rsslib.Item):
+class Link:
 
     def __init__(self, site):
-        rsslib.Item.__init__(self, site)
+        self._site = site
         self._date = None
-        self._vector = None
         self._list = []
         self._points = None
+        self._guid = None
+        self._author = None
+        self._title = None
+        self._link = None
+        self._pubdate = None
+
+        # these need to move out to disk, to reduce memory usage
+        self._descr = None
+        self._vector = None
+
+    def get_title(self):
+        return self._title
+
+    def get_link(self):
+        return self._link
+
+    def set_link(self, link):
+        self._link = string.strip(link)
+        
+    def get_description(self):
+        if self._descr:
+            return self._descr
+        with cachelock:
+            return cache[self.get_guid() + "descr"]
+
+    def set_description(self, descr):
+        # sometimes description arrives before we have the link and guid,
+        # therefore we save it temporarily, before storing it in done_loading
+        self._descr = descr
+
+    def done_loading(self):
+        if self._descr:
+            with cachelock:
+                cache[self.get_guid() + "descr"] = self._descr
+            self._descr = None
+
+    def get_vector(self):
+        key = self.get_guid() + "vector"
+        with cachelock:
+            if cache.has_key(key):
+                vector = cache[key]
+            else:
+                html = (self.get_title() or "") + " " + (self.get_description() or "")
+                text = html2text(html) + " " + self.get_url_tokens()
+                vector = vectors.text_to_vector(text, {}, None, 1)
+                cache[key] = vector
+        return vector
+
+    def get_pubdate(self):
+        return self._pubdate
+
+    def set_title(self, title):
+        self._title = title
+
+    def set_pubdate(self, pubdate):
+        self._pubdate = pubdate.strip() # must remove ws to simplify parsing
+
+    def get_site(self):
+        return self._site
+
+    def get_guid(self):
+        return self._guid or self._link
+
+    def set_guid(self, guid):
+        self._guid = guid
+
+    def get_author(self):
+        return self._author
+
+    def set_author(self, author):
+        self._author = author
 
     def get_age(self):
         age = time.time() - time.mktime(self.get_date())
         if age < 0:
             age = 3600
         return age
-
-    def get_vector(self):
-        if not self._vector:
-            html = (self.get_title() or "") + " " + (self.get_description() or "")
-            text = html2text(html) + " " + self.get_url_tokens()
-            self._vector = vectors.text_to_vector(text, {}, None, 1)
-        return self._vector
 
     def get_date(self):
         if not self._date:
@@ -595,6 +658,15 @@ def get_feeds():
         if e.errno == 2:
             return wzfactory.make_feed_registry()
         raise e
+
+# set up temporary storage for vectors and descriptions
+try:
+    os.unlink("cache.dbm.db")
+except OSError, e:
+    if e.errno != 2:
+        raise
+cache = shelve.open("cache.dbm")
+cachelock = threading.Lock()
 
 # we need to do this so that we don't hang for too long waiting for feeds
 import socket
