@@ -298,8 +298,6 @@ class RSSHandler(SAXTracker):
 
         elif name == "image":
             self._obj = self._site # restore previous object
-        elif name == "item" and parent != "keywords":
-            self._obj.done_loading() # cheating call
 
 def read_xml(url, handler):
     p = make_parser()
@@ -489,7 +487,6 @@ class AtomHandler(SAXTracker):
                 self._obj.set_author(self._site.get_editor()) # inherit
             if self._obj.get_description() == None and self._summary != None:
                 self._obj.set_description(self._summary) # fallback
-            self._obj.done_loading() # cheating call
         elif name == "title":
             self._obj.set_title(self._contents)
         elif name == "subtitle" and parent == "feed":

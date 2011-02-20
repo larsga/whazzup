@@ -129,17 +129,12 @@ class Link:
     def __init__(self, site):
         self._site = site
         self._date = None
-        self._list = []
         self._points = None
         self._guid = None
         self._author = None
         self._title = None
         self._link = None
         self._pubdate = None
-
-        # these need to move out to disk, to reduce memory usage
-        self._descr = None
-        self._vector = None
 
     def get_title(self):
         return self._title
@@ -151,32 +146,20 @@ class Link:
         self._link = string.strip(link)
         
     def get_description(self):
-        if self._descr:
-            return self._descr
-        with cachelock:
-            return cache[self.get_guid() + "descr"]
+        return cache.get(str(id(self)) + "descr")
 
     def set_description(self, descr):
-        # sometimes description arrives before we have the link and guid,
-        # therefore we save it temporarily, before storing it in done_loading
-        self._descr = descr
-
-    def done_loading(self):
-        if self._descr:
-            with cachelock:
-                cache[self.get_guid() + "descr"] = self._descr
-            self._descr = None
+        cache[str(id(self)) + "descr"] = descr
 
     def get_vector(self):
-        key = self.get_guid() + "vector"
-        with cachelock:
-            if cache.has_key(key):
-                vector = cache[key]
-            else:
-                html = (self.get_title() or "") + " " + (self.get_description() or "")
-                text = html2text(html) + " " + self.get_url_tokens()
-                vector = vectors.text_to_vector(text, {}, None, 1)
-                cache[key] = vector
+        key = str(id(self)) + "vector"
+        if cache.has_key(key):
+            vector = cache[key]
+        else:
+            html = (self.get_title() or "") + " " + (self.get_description() or "")
+            text = html2text(html) + " " + self.get_url_tokens()
+            vector = vectors.text_to_vector(text, {}, None, 1)
+            cache[key] = vector
         return vector
 
     def get_pubdate(self):
@@ -241,12 +224,10 @@ class Link:
         return self._points
 
     def get_word_probability(self):
-        self._list = []
         probs = []
         for (word, count) in self.get_vector().get_pairs():
             for ix in range(count):
                 ratio = feeddb.get_word_ratio(word)
-                self._list.append("%s : %s" % (escape(word), ratio))
                 probs.append(ratio)
 
         try:
@@ -280,11 +261,8 @@ class Link:
         return prob
         
     def recalculate(self):
-        self._list = []                
         try:
             prob = self.get_overall_probability()
-            self._list.append("site: %s" % self.get_site_probability())
-            self._list.append(str(prob))
             self._points = (prob * 1000.0) / math.log(self.get_age())
         except ZeroDivisionError, e:
             #print "--------------------------------------------------"
@@ -324,7 +302,12 @@ class Link:
         return string.join(["url:" + t for t in tokens if chew.acceptable_term(t)])
 
     def get_word_tokens(self):
-        return string.join(self._list, ", ")
+        probs = []
+        for (word, count) in self.get_vector().get_pairs():
+            for ix in range(count):
+                ratio = feeddb.get_word_ratio(word)
+                probs.append("%s : %s" % (escape(word), ratio))
+        return ", ".join(probs)
 
 class Word:
 
@@ -666,7 +649,6 @@ except OSError, e:
     if e.errno != 2:
         raise
 cache = shelve.open("cache.dbm")
-cachelock = threading.Lock()
 
 # we need to do this so that we don't hang for too long waiting for feeds
 import socket
