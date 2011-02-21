@@ -1,5 +1,17 @@
-import time, vectors, operator, string, dbm, math, formatmodules, HTMLParser, rsslib, sys, codecs, os, threading, traceback, cgi, chew, shelve
+
+import time, vectors, operator, string, math, formatmodules, HTMLParser, rsslib, sys, codecs, os, threading, traceback, cgi, chew, shelve, datetime
 from xml.sax import SAXException
+
+try:
+    # we're running normally
+    import dbm
+    appengine = False
+except ImportError:
+    # we're running in appengine
+    from google.appengine.api import users
+    from google.appengine.ext import db
+    from google.appengine.api import urlfetch
+    appengine = True
 
 TIME_TO_WAIT = 3600 * 3 # 3 hours
 START_VOTES = 5
@@ -41,7 +53,255 @@ def compute_average(probs):
     sum = reduce(operator.add, probs)
     return sum / float(len(probs))
 
+def parse_date(datestring):
+    if datestring:
+        formats = [("%a, %d %b %Y %H:%M:%S", 24),
+                   ("%Y-%m-%dT%H:%M:%S", 19),
+                   ("%a, %d %b %Y %H:%M", 22),
+                   ("%Y-%m-%d", 10),
+
+                   #Sun Jan 16 15:55:53 UTC 2011
+                   ("%a %b %d %H:%M:%S +0000 %Y", 30),
+
+                   #Sun, 16 January 2011 07:13:33
+                   ("%a, %d %B %Y %H:%M:%S", 29)]
+        for (format, l) in formats:
+            try:
+                return datetime.datetime.strptime(datestring[ : l], format)
+            except ValueError:
+                pass
+
+        print "CAN'T PARSE:", repr(datestring)
+
+    return datetime.utcnow()
+
 # --- Model
+
+class FeedDatabase(rsslib.FeedRegistry):
+
+    def __init__(self):
+        rsslib.FeedRegistry.__init__(self)
+        self._feeds = []
+        self._title = None
+        self._items = [] # list of Link objects
+        self._feedmap = {} # id -> feed
+        self._linkmap = {} # id -> link
+        self._feedurlmap = {} # feed url -> feed
+        self._linkguidmap = {} # link guid -> link
+        self._links = LinkTracker()        
+        self._words = WordDatabase("words.dbm")
+        self._sites = WordDatabase("sites.dbm")
+        self._authors = WordDatabase("authors.dbm")
+        self._lock = threading.Lock()
+        try:
+            self._faves = rsslib.read_rss("faves.rss", wzfactory)
+        except IOError:
+            self._faves = Feed("faves.rss")
+            self._faves.set_title("Recent reading")
+            self._faves.set_description("A feed of my favourite recent reads.")
+
+    def get_title(self):
+        return self._title
+
+    def set_title(self, title):
+        self._title = title
+        
+    def get_feeds(self):
+        return self._feeds
+
+    def add_feed_url(self, feedurl):
+        self.add_feed(rsslib.read_feed(feedurl, wzfactory))
+            
+    def init(self):
+        new_posts = []
+        for feed in self._feeds:
+            url = feed.get_url()
+            new_posts += self.read_feed(url)
+        return new_posts
+        
+    def sort(self):
+        try:
+            self._lock.acquire()
+            self._items = sort(self._items, Link.get_points)
+            self._items.reverse()
+
+            ix = len(self._items) - 1
+            while ix >= 0 and len(self._items) > MAX_STORIES:
+                if self._items[ix].get_age() > (86400 * 2):
+                    del self._items[ix]
+                ix -= 1
+        finally:
+            self._lock.release()
+            
+    def get_item_count(self):
+        return len(self._items)
+
+    def get_item_no(self, ix):
+        return self._items[ix]
+
+    def get_item_by_id(self, id):
+        return self._linkmap[id]
+
+    def get_items(self):
+        return self._items
+
+    def get_no_of_item(self, item):
+        try:
+            self._lock.acquire()
+            return self._items.index(item)
+        except ValueError:
+            return None
+        finally:
+            self._lock.release()
+
+    def remove_item(self, item):
+        try:
+            self._lock.acquire()
+            self._items.remove(item)
+        finally:
+            self._lock.release()
+    
+    def get_feed_by_id(self, id):
+        return self._feedmap[int(id)]
+
+    def add_feed(self, feed):
+        self._feeds.append(feed)
+        self._feedmap[feed.get_local_id()] = feed
+        self._feedurlmap[feed.get_url()] = feed
+
+    def remove_feed(self, feed):
+        self._feeds.remove(feed)
+        del self._feedmap[feed.get_local_id()]
+        del self._feedurlmap[feed.get_url()]
+
+    def get_faves(self):
+        return self._faves
+    
+    def add_fave(self, fave):
+        # FIXME: set a limit to the number of items in the feed
+        self._faves.add_item_to_front(fave)
+        outf = codecs.open("faves.rss", "w", "utf-8")
+        rsslib.write_rss(self._faves, outf)
+        outf.close()
+
+        os.system("scp faves.rss garshol.virtual.vps-host.net:/home/larsga/")
+
+    def save(self):
+        outf = open("feeds.txt", "w")
+        for feed in self._feeds:
+            outf.write("%s | %s\n" %
+                       (feed.get_url(),
+                        feed.get_time_to_wait()))
+        outf.close()
+
+    def get_vote_stats(self):
+        up = 0
+        down = 0
+        for feed in self._feeds:
+            (fu, fd) = self._sites.get_word_stats(feed.get_link())
+            up += fu
+            down += fd
+        return (up, down)
+
+    def commit(self):
+        """A desperate attempt to preserve DB changes even in the face of
+        crashes."""
+        self._words.close()
+        self._sites.close()
+        self._authors.close()
+        self._words = WordDatabase("words.dbm")
+        self._sites = WordDatabase("sites.dbm")
+        self._authors = WordDatabase("authors.dbm")
+
+    # delegation calls
+
+    def get_word_ratio(self, word):
+        return self._words.get_word_ratio(word)
+
+    def record_word_vote(self, word, vote):
+        self._words.record_vote(word, vote)
+        
+    def get_site_ratio(self, link):
+        return self._sites.get_word_ratio(link)
+
+    def change_site_url(self, oldlink, newlink):
+        feed = self._feedurlmap[oldlink]
+        del self._feedurlmap[oldlink]
+        self._feedurlmap[newlink] = feed
+        self._sites.change_word(oldlink, newlink)
+
+    def record_site_vote(self, link, vote):
+        self._sites.record_vote(link, vote)
+    
+    def get_author_ratio(self, author):
+        return self._authors.get_word_ratio(author)
+
+    def record_author_vote(self, author, vote):
+        self._authors.record_vote(author, vote)
+    
+    def is_link_seen(self, uid):
+        return self._links.is_link_seen(uid)
+
+    def seen_link(self, uid):
+        self._links.seen_link(uid)
+
+    # internal stuff
+
+    def read_feed(self, url):
+        oldsite = self._feedurlmap.get(url)
+        if oldsite:
+            oldsite.being_read()
+                
+        try:
+            site = rsslib.read_feed(url, wzfactory)
+        except Exception, e:
+            if oldsite:
+                oldsite.not_being_read()
+                oldsite.set_error(traceback.format_exc())
+            if not isinstance(e, IOError):
+                traceback.print_exc()
+            else:
+                print "ERROR: ", e
+            return [] # we didn't get any feed, so no point in continuing
+                
+        items = site.get_items()
+        items.reverse() # go through them from the back to get
+                        # right order when added to oldsite
+        new_items = []
+        try:
+            try:
+                self._lock.acquire()
+                for item in items:
+                    if oldsite and not self._linkguidmap.has_key(item.get_guid()):
+                        # means we've read this feed before, but we don't have
+                        # this particular item. so we move it across
+                        item._site = oldsite
+                        oldsite.add_item_to_front(item)
+                        new_items.append(item)
+
+                    if not self._linkguidmap.has_key(item.get_guid()):
+                        self._linkmap[item.get_local_id()] = item
+                        self._linkguidmap[item.get_guid()] = item
+                        if not item.is_seen():
+                            self._items.append(item)
+            except:
+                traceback.print_exc()
+        finally:
+            self._lock.release()
+
+        if oldsite:
+            oldsite.now_read()
+            oldsite.set_title(site.get_title())
+            if site.get_link():
+                oldsite.set_link(site.get_link())
+            oldsite.set_error(None)
+        else:
+            # we might not have seen this feed before, in which case we add it
+            if not self._feedurlmap.has_key(url):
+                self.add_feed(site)
+            site.now_read()
+
+        return new_items
 
 class Feed(rsslib.SiteSummary):
 
@@ -194,30 +454,7 @@ class Link:
 
     def get_date(self):
         if not self._date:
-            if self.get_pubdate():
-                formats = [("%a, %d %b %Y %H:%M:%S", 24),
-                           ("%Y-%m-%dT%H:%M:%S", 19),
-                           ("%a, %d %b %Y %H:%M", 22),
-                           ("%Y-%m-%d", 10),
-
-                           #Sun Jan 16 15:55:53 UTC 2011
-                           ("%a %b %d %H:%M:%S +0000 %Y", 30),
-
-                           #Sun, 16 January 2011 07:13:33
-                           ("%a, %d %B %Y %H:%M:%S", 29)]
-                for (format, l) in formats:
-                    try:
-                        self._date = time.strptime(self.get_pubdate()[ : l],
-                                                   format)
-                        break
-                    except ValueError:
-                        pass
-
-                if not self._date:
-                    print "CAN'T PARSE:", repr(self.get_pubdate())
-                    self._date = time.gmtime()
-            else:
-                self._date = time.gmtime()
+            self._date = parse_date(self.get_pubdate())
         return self._date
     
     def get_points(self):
@@ -373,7 +610,7 @@ class WordDatabase:
         # else: this means it's in the cache
         #       will also be on disk if there's data in it
         return word
-
+    
 class LinkTracker:
 
     def __init__(self):
@@ -394,220 +631,6 @@ class LinkTracker:
         outf = open("seen-urls.txt", "a")
         outf.write(link + "\n")
         outf.close()
-
-class FeedDatabase(rsslib.FeedRegistry):
-
-    def __init__(self):
-        rsslib.FeedRegistry.__init__(self)
-        #self._feeds, inherited list of Feed objects
-        self._items = [] # list of Link objects
-        self._feedmap = {} # id -> feed
-        self._linkmap = {} # id -> link
-        self._feedurlmap = {} # feed url -> feed
-        self._linkguidmap = {} # link guid -> link
-        self._links = LinkTracker()        
-        self._words = WordDatabase("words.dbm")
-        self._sites = WordDatabase("sites.dbm")
-        self._authors = WordDatabase("authors.dbm")
-        self._lock = threading.Lock()
-        try:
-            self._faves = rsslib.read_rss("faves.rss", wzfactory)
-        except IOError:
-            self._faves = Feed("faves.rss")
-            self._faves.set_title("Recent reading")
-            self._faves.set_description("A feed of my favourite recent reads.")
-
-    def init(self):
-        new_posts = []
-        for feed in self._feeds:
-            url = feed.get_url()
-            new_posts += self.read_feed(url)
-        return new_posts
-        
-    def sort(self):
-        try:
-            self._lock.acquire()
-            self._items = sort(self._items, Link.get_points)
-            self._items.reverse()
-
-            ix = len(self._items) - 1
-            while ix >= 0 and len(self._items) > MAX_STORIES:
-                if self._items[ix].get_age() > (86400 * 2):
-                    del self._items[ix]
-                ix -= 1
-        finally:
-            self._lock.release()
-            
-    def get_item_count(self):
-        return len(self._items)
-
-    def get_item_no(self, ix):
-        return self._items[ix]
-
-    def get_item_by_id(self, id):
-        return self._linkmap[id]
-
-    def get_items(self):
-        return self._items
-
-    def get_no_of_item(self, item):
-        try:
-            self._lock.acquire()
-            return self._items.index(item)
-        except ValueError:
-            return None
-        finally:
-            self._lock.release()
-
-    def remove_item(self, item):
-        try:
-            self._lock.acquire()
-            self._items.remove(item)
-        finally:
-            self._lock.release()
-    
-    def get_feed_by_id(self, id):
-        return self._feedmap[id]
-
-    def add_feed(self, feed):
-        self._feeds.append(feed)
-        self._feedmap[feed.get_local_id()] = feed
-        self._feedurlmap[feed.get_url()] = feed
-
-    def remove_feed(self, feed):
-        self._feeds.remove(feed)
-        del self._feedmap[feed.get_local_id()]
-        del self._feedurlmap[feed.get_url()]
-
-    def get_faves(self):
-        return self._faves
-    
-    def add_fave(self, fave):
-        # FIXME: set a limit to the number of items in the feed
-        self._faves.add_item_to_front(fave)
-        outf = codecs.open("faves.rss", "w", "utf-8")
-        rsslib.write_rss(self._faves, outf)
-        outf.close()
-
-        os.system("scp faves.rss garshol.virtual.vps-host.net:/home/larsga/")
-
-    def save(self):
-        outf = open("feeds.txt", "w")
-        for feed in self._feeds:
-            outf.write("%s | %s\n" %
-                       (feed.get_url(),
-                        feed.get_time_to_wait()))
-        outf.close()
-
-    def get_vote_stats(self):
-        up = 0
-        down = 0
-        for feed in self._feeds:
-            (fu, fd) = self._sites.get_word_stats(feed.get_link())
-            up += fu
-            down += fd
-        return (up, down)
-
-    def commit(self):
-        """A desperate attempt to preserve DB changes even in the face of
-        crashes."""
-        self._words.close()
-        self._sites.close()
-        self._authors.close()
-        self._words = WordDatabase("words.dbm")
-        self._sites = WordDatabase("sites.dbm")
-        self._authors = WordDatabase("authors.dbm")
-
-    # delegation calls
-
-    def get_word_ratio(self, word):
-        return self._words.get_word_ratio(word)
-
-    def record_word_vote(self, word, vote):
-        self._words.record_vote(word, vote)
-        
-    def get_site_ratio(self, link):
-        return self._sites.get_word_ratio(link)
-
-    def change_site_url(self, oldlink, newlink):
-        feed = self._feedurlmap[oldlink]
-        del self._feedurlmap[oldlink]
-        self._feedurlmap[newlink] = feed
-        self._sites.change_word(oldlink, newlink)
-
-    def record_site_vote(self, link, vote):
-        self._sites.record_vote(link, vote)
-    
-    def get_author_ratio(self, author):
-        return self._authors.get_word_ratio(author)
-
-    def record_author_vote(self, author, vote):
-        self._authors.record_vote(author, vote)
-    
-    def is_link_seen(self, uid):
-        return self._links.is_link_seen(uid)
-
-    def seen_link(self, uid):
-        self._links.seen_link(uid)
-
-    # internal stuff
-
-    def read_feed(self, url):
-        oldsite = self._feedurlmap.get(url)
-        if oldsite:
-            oldsite.being_read()
-                
-        try:
-            site = rsslib.read_feed(url, wzfactory)
-        except Exception, e:
-            if oldsite:
-                oldsite.not_being_read()
-                oldsite.set_error(traceback.format_exc())
-            if not isinstance(e, IOError):
-                traceback.print_exc()
-            else:
-                print "ERROR: ", e
-            return [] # we didn't get any feed, so no point in continuing
-                
-        items = site.get_items()
-        items.reverse() # go through them from the back to get
-                        # right order when added to oldsite
-        new_items = []
-        try:
-            try:
-                self._lock.acquire()
-                for item in items:
-                    if oldsite and not self._linkguidmap.has_key(item.get_guid()):
-                        # means we've read this feed before, but we don't have
-                        # this particular item. so we move it across
-                        item._site = oldsite
-                        oldsite.add_item_to_front(item)
-                        new_items.append(item)
-
-                    if not self._linkguidmap.has_key(item.get_guid()):
-                        #print " ", (item.get_link() or "").encode("utf-8")
-                        self._linkmap[item.get_local_id()] = item
-                        self._linkguidmap[item.get_guid()] = item
-                        if not item.is_seen():
-                            self._items.append(item)
-            except:
-                traceback.print_exc()
-        finally:
-            self._lock.release()
-
-        if oldsite:
-            oldsite.now_read()
-            oldsite.set_title(site.get_title())
-            if site.get_link():
-                oldsite.set_link(site.get_link())
-            oldsite.set_error(None)
-        else:
-            # we might not have seen this feed before, in which case we add it
-            if not self._feedurlmap.has_key(url):
-                self.add_feed(site)
-            site.now_read()
-
-        return new_items
 
 class WhazzupFactory(rsslib.DefaultFactory):
 
@@ -642,29 +665,245 @@ def get_feeds():
             return wzfactory.make_feed_registry()
         raise e
 
-# set up temporary storage for vectors and descriptions
-try:
-    os.unlink("cache.dbm.db")
-except OSError, e:
-    if e.errno != 2:
-        raise
-cache = shelve.open("cache.dbm")
+# --- AppEngine implementation
 
-# we need to do this so that we don't hang for too long waiting for feeds
-import socket
-socket.setdefaulttimeout(20)
+class GAEUser(db.Model):
+    user = db.UserProperty()
+    lastvisit = db.DateTimeProperty()
+
+class GAEFeed(db.Model):
+    xmlurl = db.LinkProperty()
+    htmlurl = db.LinkProperty()
+    title = db.StringProperty()
+    checkinterval = db.IntegerProperty()
+    lastcheck = db.DateTimeProperty()
+    error = db.StringProperty()
+    lasterror = db.DateTimeProperty()
+
+class GAESubscription(db.Model):
+    user = db.UserProperty() # could be reference, too
+    feed = db.ReferenceProperty(GAEFeed)
+    up = db.IntegerProperty()
+    down = db.IntegerProperty()
+
+class GAEPost(db.Model):
+    url = db.LinkProperty()
+    title = db.StringProperty()
+    author = db.StringProperty()
+    pubdate = db.DateTimeProperty()
+    content = db.TextProperty()
+    feed = db.ReferenceProperty(GAEFeed)
+
+# FIXME: choices choices
+# (1) vector, points, subscription    -- duplicates all post info
+# (2) separate GAEPostRating
+#       subscription, vector, points, post (feed in GAEPost)
     
-# print "\n==================================================\nWE GOT IMPORTED\n=================================================="
-wzfactory = WhazzupFactory()
-feeddb = get_feeds()
+# --- SeenPost
 
-# thread = None
-# for t in threading.enumerate():
-#     if t.name == "FeedReader":
-#         thread = t
-# if not thread:
-#     print "Starting thread"
-#     feeddb = get_feeds()
-#     thread = start_feed_reader(feeddb)
-# else:
-#     print "Thread already running, not starting"
+# url
+# user
+# datetime
+
+# --- Word
+
+# user
+# word
+# up
+# down
+
+def gae_loader(parser, url):
+    result = urlfetch.fetch(url)
+    if result.status_code != 200:
+        raise IOError("Error retrieving URL")
+
+    parser.feed(result.content)
+    parser.close()
+    
+class GAEFeedDatabase:
+
+    def get_feed_by_id(self, key):
+        return FeedWrapper(db.get(db.Key(key)))
+
+    def add_feed_url(self, feedurl):
+        # first check if the feed is in the database at all
+        result = db.GqlQuery("""
+         select * 
+         from GAEFeed
+         where xmlurl = :1
+        """, feedurl)
+
+        if not result.count(): # it's not there
+            feed = GAEFeed()
+            feed.xmlurl = feedurl
+            feed.put()
+        else:
+            feed = result[0]
+
+        # now add a subscription for this user
+        user = users.get_current_user()
+        result = db.GqlQuery("""
+         select * 
+         from GAESubscription
+         where user = :1 and feed = :2
+        """, user, feed)
+
+        if not result.count(): # it's not there
+            sub = GAESubscription()
+            sub.user = user
+            sub.feed = feed
+            sub.put()
+    
+    def get_item_count(self):
+        return 0
+
+    def get_vote_stats(self):
+        return (0, 0)
+
+    def get_feeds(self):
+        user = users.get_current_user()
+        result = db.GqlQuery("""
+          select *
+          from GAESubscription
+          where user = :1
+        """, user)
+        return [FeedWrapper(sub) for sub in result]
+
+    def save(self):
+        pass # it's a noop on GAE
+
+    # --- specific to GAE
+
+    def check_feed(self, key):
+        feed = db.get(db.Key(key))
+        try:
+            site = rsslib.read_feed(feed.xmlurl, data_loader = gae_loader)
+        except Exception, e:
+            # we failed, so record the failure and move on
+            traceback.print_exc()
+            feed.error = str(e)
+            feed.lasterror = datetime.datetime.now()
+            feed.put()
+            return
+
+        feed.title = site.get_title()
+        feed.htmlurl = site.get_link()
+        feed.lastcheck = datetime.datetime.now()
+        feed.error = None
+        feed.lasterror = None
+        feed.put()
+
+        post_map = {}
+        current_posts = db.GqlQuery("""
+          select *
+          from GAEPost
+          where feed = :1
+        """, feed)
+        for post in current_posts:
+            post_map[str(post.url)] = post
+        
+        for item in site.get_items():
+            post = post_map.get(item.get_link())
+            if not post:
+                post = GAEPost()
+                post.url = item.get_link()
+                post.feed = feed
+
+            post.title = item.get_title()
+            post.author = item.get_author()
+            post.content = item.get_description()
+            post.pubdate = parse_date(item.get_pubdate())
+            post.put()
+
+class FeedWrapper:
+
+    def __init__(self, obj):
+        if isinstance(obj, GAESubscription):
+            self._sub = obj
+            self._feed = obj.feed
+        else:
+            self._feed = obj
+            # better not try to touch self._sub here...
+
+    def get_url(self):
+        return self._feed.xmlurl
+            
+    def get_link(self):
+        return self._feed.htmlurl
+            
+    def get_title(self):
+        return self._feed.title or "[No title]"
+
+    def get_ratio(self):
+        up = (self._sub.up or 0) + START_VOTES
+        down = (self._sub.down or 0) + START_VOTES
+        return up / float(up + down)
+
+    def get_local_id(self):
+        return self._feed.key()
+
+    def get_error(self):
+        return self._feed.error
+
+    def get_items(self):
+        result = db.GqlQuery("""
+          select *
+          from GAEPost
+          where feed = :1
+        """, self._feed)
+        return [PostWrapper(self, post) for post in result]
+
+    def get_time_to_wait(self):
+        return self._feed.checkinterval
+
+    def time_since_last_read(self):
+        return 0
+
+    def is_being_read(self):
+        return False
+
+    # this must be precomputed and stored if we are going to do them at all
+    def get_unread_count(self):
+        return 0
+
+class PostWrapper:
+
+    def __init__(self, parent, post):
+        self._parent = parent
+        self._post = post
+
+    def get_title(self):
+        return self._post.title
+
+    def get_author(self):
+        return self._post.author
+    
+    def is_seen(self):
+        return False
+
+    def get_local_id(self):
+        return self._post.key()
+
+    def get_link(self):
+        return self._post.url
+
+    def get_site(self):
+        return self._parent
+    
+if appengine:
+    feeddb = GAEFeedDatabase()
+else:
+    # set up temporary storage for vectors and descriptions
+    try:
+        os.unlink("cache.dbm.db")
+    except OSError, e:
+        if e.errno != 2:
+            raise
+    cache = shelve.open("cache.dbm")
+
+    # we need to do this so that we don't hang for too long waiting for feeds
+    import socket
+    socket.setdefaulttimeout(20)
+
+    wzfactory = WhazzupFactory()
+    feeddb = get_feeds()

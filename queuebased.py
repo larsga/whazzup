@@ -4,6 +4,12 @@ queue-based approach to maintaining server state. Eventually all the
 code here will be folded into feedlib.
 """
 
+try:
+    from google.appengine.api import users
+    appengine = True
+except ImportError:
+    appengine = False
+
 # ISSUES TO FIX:
 #  - thread dormant time is not set correctly
 
@@ -111,13 +117,16 @@ def recalculate_all_posts():
     if posts:
         queue.put((0, RecalculatePosts(posts)))
 
-import threading
-thread = None
-for t in threading.enumerate():
-    if t.name == "FeedReader":
-        thread = t
-if not thread:
-    print "Starting thread"
-    thread = start_queue_worker()
+if not appengine:
+    import threading
+    thread = None
+    for t in threading.enumerate():
+        if t.name == "FeedReader":
+            thread = t
+    if not thread:
+        print "Starting thread"
+        thread = start_queue_worker()
+    else:
+        print "Thread already running, not starting"
 else:
-    print "Thread already running, not starting"
+    lasttick = 0

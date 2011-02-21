@@ -1,13 +1,20 @@
+
 import time, string, math, rsslib, sys, feedlib, queuebased, StringIO
 from xml.sax import SAXException
-    
+
 import web
+
+try:
+    from google.appengine.api import users
+    appengine = True
+except ImportError:
+    appengine = False
 
 urls = (
     '/(\d*)', 'List',
     '/vote/(up|down|read|star)/(\d+)', 'Vote',
     '/sites', 'Sites',
-    '/site/(\d+)', 'SiteReport',
+    '/site/(.+)', 'SiteReport',
     '/update-site/(\d+)', 'UpdateSite',
     '/delete-site/(\d+)', 'DeleteSite',
     '/start-thread', 'StartThread',
@@ -18,7 +25,10 @@ urls = (
     '/shutdown', 'Shutdown',
     '/faveform/(\d*)', 'FaveForm',
     '/recalc', 'Recalculate',
-    '/uploadopml', 'ImportOPML'
+    '/uploadopml', 'ImportOPML',
+
+    # app engine tasks
+    '/task/check-feed/(.+)', 'TaskCheckFeed',
     )
 
 def nocache():
@@ -40,10 +50,10 @@ class List:
         low = min(page * 25, feeddb.get_item_count())
         high = min(low + 25, feeddb.get_item_count())
 
-        return render.list(page,
-                           self.get_thread_health(),
-                           low, high,
-                           feeddb)             
+        return render.storylist(page,
+                                self.get_thread_health(),
+                                low, high,
+                                feeddb)             
 
     def get_thread_health(self):
         wait = time.time() - queuebased.lasttick
@@ -56,7 +66,6 @@ class SiteReport:
     def GET(self, id):
         nocache()
 
-        id = int(id)
         feed = feeddb.get_feed_by_id(id)
         return render.sitereport(feed)
             
@@ -93,7 +102,7 @@ class Sites:
     def GET(self):
         nocache()
         
-        sfeeds = feedlib.sort(feeddb.get_feeds(), feedlib.Feed.get_ratio)
+        sfeeds = feedlib.sort(feeddb.get_feeds(), lambda feed: feed.get_ratio())
         sfeeds.reverse()
         return render.sites(sfeeds)
         
@@ -145,9 +154,9 @@ class ImportOPML:
 class AddFeed:
     def POST(self):
         url = string.strip(web.input().get("url"))
-        posts = feeddb.read_feed(url)
+        feeddb.add_feed_url(url)
         feeddb.save()
-        return  "<p>Feed added, %s posts loaded</p>" % len(posts)
+        return  "<p>Feed added to queue for processing.</p>"
 
 class AddFave:
     def POST(self):        
@@ -217,9 +226,19 @@ class Shutdown:
     def GET(self):
         sys.exit()
 
-# web.webapi.internalerror = web.debugerror
+# --- App Engine tasks
+
+class TaskCheckFeed:
+
+    def GET(self, key):
+        feeddb.check_feed(key)
+        
+web.webapi.internalerror = web.debugerror
 
 feeddb = feedlib.feeddb
 if __name__ == "__main__":
     app = web.application(urls, globals())
-    app.run()
+    if appengine:
+        app.cgirun()
+    else:
+        app.run()
