@@ -1,14 +1,8 @@
 
-import time, string, math, rsslib, sys, feedlib, queuebased, StringIO
+import time, string, math, rsslib, sys, feedlib, StringIO
 from xml.sax import SAXException
 
 import web
-
-try:
-    from google.appengine.api import users
-    appengine = True
-except ImportError:
-    appengine = False
 
 urls = (
     '/(\d*)', 'List',
@@ -29,6 +23,7 @@ urls = (
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
+    '/task/find-feeds-to-check/', 'FindFeedsToCheck',
     )
 
 def nocache():
@@ -56,7 +51,7 @@ class List:
                                 feeddb)             
 
     def get_thread_health(self):
-        wait = time.time() - queuebased.lasttick
+        wait = controller.get_queue_delay()
         if wait < 120:
             return "Thread is OK (%s)" % int(wait)
         else:
@@ -113,7 +108,7 @@ class Vote:
         ix = feeddb.get_no_of_item(link)
         link.record_vote(vote)
         if vote != "read":
-            queuebased.recalculate_all_posts() # since scores have changed
+            controller.recalculate_all_posts() # since scores have changed
         web.seeother("/%s" % (ix / 25))
 
 class ShowItem:
@@ -129,11 +124,7 @@ class Reload:
     def GET(self):
         nocache()
         print "<h1>Reloaded</h1>"
-        print "<pre>"
-        new_posts = feeddb.init() # does a reload
-        if new_posts:
-            queuebased.queue.put((0, queuebased.RecalculatePosts(new_posts)))
-        print "</pre>"
+        controller.reload()
 
 class ImportOPML:
     def POST(self):
@@ -145,8 +136,7 @@ class ImportOPML:
         inf.close()
 
         for newfeed in feeds.get_feeds():
-            feed = feedlib.Feed(newfeed.get_url())
-            feeddb.add_feed(feed)
+            feeddb.add_feed_url(newfeed.get_url())
         
         feeddb.save()
         return "<p>Imported.</p>"
@@ -211,7 +201,7 @@ class FaveForm:
 class StartThread:
 
     def GET(self):
-        feedlib.start_feed_reader(feeddb)
+        controller.start_feed_reader(feeddb)
         print "<p>Thread started.</p>"
 
 class Recalculate:
@@ -232,13 +222,42 @@ class TaskCheckFeed:
 
     def GET(self, key):
         feeddb.check_feed(key)
+
+    def POST(self, key):
+        feeddb.check_feed(key)
+
+class FindFeedsToCheck:
+
+    def GET(self):
+        controller.find_feeds_to_check()
+
+    def POST(self):
+        controller.find_feeds_to_check()
         
 web.webapi.internalerror = web.debugerror
 
-feeddb = feedlib.feeddb
+#import signal
+#def signal_handler(signal, frame):
+#    print 'You pressed Ctrl+C!'
+#    sys.exit(0)
+#signal.signal(signal.SIGINT, signal_handler)
+
+try:
+    from google.appengine.api import users
+    # we're running in appengine
+    import appengine
+    module = appengine
+except ImportError:
+    # not in appengine
+    import diskimpl
+    module = diskimpl
+    
+controller = module.controller
+feeddb = module.feeddb
+
 if __name__ == "__main__":
     app = web.application(urls, globals())
-    if appengine:
+    if controller.in_appengine():
         app.cgirun()
     else:
         app.run()

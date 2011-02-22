@@ -1,0 +1,3 @@
+cron:
+- url: /task/find-feeds-to-check/
+  schedule: every 1 minutes
