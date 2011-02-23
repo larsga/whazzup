@@ -33,12 +33,12 @@ class AppEngineController(feedlib.Controller):
         if not result.count(): # it's not there
             feed = GAEFeed()
             feed.xmlurl = feedurl
-            feed.put()
-            feedcreated = True
+            feed.subscribers = 1
         else:
             feed = result[0]
-            feedcreated = False
-
+            feed.subscribers += 1
+        feed.put()
+            
         # now add a subscription for this user
         user = users.get_current_user()
         result = db.GqlQuery("""
@@ -53,16 +53,14 @@ class AppEngineController(feedlib.Controller):
         sub.feed = feed
         sub.put()
 
-        if not feedcreated:
+        if feed.subscribers > 1:
             # the feed was already there and loaded, so just calculate ratings
             # for this user
             self.queue_recalculate_subscription(sub)
-
-        # FIXME: if the feed was not already there, I guess we first of all
-        # need to find some content for it
-
-    def queue_recalculate_subscription(self, sub):
-        taskqueue.add(url = "/task/recalc-sub/" + str(key))        
+        else:
+            # we didn't have this feed from before, so let's start by
+            # downloading it. this in turn will trigger a recalculation
+            self.queue_check_feed(feed)
 
     def recalculate_subscription(self, key):
         sub = db.get(db.Key(key))
@@ -113,7 +111,7 @@ class AppEngineController(feedlib.Controller):
         """)
 
         for key in result:
-            taskqueue.add(url = "/task/check-feed/" + str(key))
+            self.queue_check_feed(key)
         
         result = db.GqlQuery("""
          select __key__
@@ -122,7 +120,7 @@ class AppEngineController(feedlib.Controller):
         """, checktime)
 
         for key in result:
-            taskqueue.add(url = "/task/check-feed/" + str(key))
+            self.queue_check_feed(key)
 
     # --- specific to GAE (FIXME: but should it be?)
 
@@ -175,6 +173,28 @@ class AppEngineController(feedlib.Controller):
               select * from GAESubscription where feed = :1""", feed):
                 self.queue_recalculate_subscription(sub)
 
+    # definitely specific to GAE
+
+    def remove_dead_feeds(self):
+        for feed in db.GqlQuery("select * from GAEFeed where subscribers = 0"):
+            for post in db.GqlQuery("select __key__ from GAEPost where "
+                                    "feed = :1", feed):
+                post.delete()
+            # delete the ratings, too?
+            feed.delete()
+
+    # methods to queue tasks
+
+    def queue_recalculate_subscription(self, sub):
+        taskqueue.add(url = "/task/recalc-sub/" + str(key))        
+
+    def queue_check_feed(self, keyorfeed):
+        if isinstance(keyorfeed, GAEFeed):
+            key = keyorfeed.key()
+        else:
+            key = keyorfeed
+        taskqueue.add(url = "/task/check-feed/" + str(key))
+        
 # --- AppEngine implementation
 
 class GAEUser(db.Model):
@@ -190,6 +210,7 @@ class GAEFeed(db.Model):
     lastcheck = db.DateTimeProperty()
     error = db.StringProperty()
     lasterror = db.DateTimeProperty()
+    subscribers = db.IntegerProperty() # when this goes to 0...
 
 class GAESubscription(db.Model):
     user = db.UserProperty()

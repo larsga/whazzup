@@ -25,6 +25,7 @@ urls = (
     '/task/check-feed/(.+)', 'TaskCheckFeed',
     '/task/find-feeds-to-check/', 'FindFeedsToCheck',
     '/task/recalc-sub/(.+)', 'RecalculateSubscription',
+    '/task/remove-dead-feeds/', 'RemoveDeadFeeds',
     )
 
 def nocache():
@@ -240,6 +241,14 @@ class RecalculateSubscription: # ie: user x feed
 
     def POST(self, key):
         controller.recalculate_subscription(key)
+
+class RemoveDeadFeeds:
+
+    def GET(self):
+        controller.remove_dead_feeds()
+
+    def POST(self):
+        controller.remove_dead_feeds()
         
 web.webapi.internalerror = web.debugerror
 

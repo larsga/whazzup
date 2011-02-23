@@ -1,3 +1,5 @@
 cron:
 - url: /task/find-feeds-to-check/
   schedule: every 1 minutes
+- url: /task/remove-dead-feeds/
+  schedule: every 24 hours
