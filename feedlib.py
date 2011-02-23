@@ -81,3 +81,27 @@ class Controller:
 
 # --- Model
 
+class Post:
+
+    def get_age(self):
+        age = time.time() - self.get_date().toordinal()
+        if age < 0:
+            age = 3600
+        return age
+
+    def get_author_vector(self):
+        return vectors.text_to_vector(html2text(self.get_author() or ""))
+        
+    def get_overall_probability(self):
+        word_prob = self.get_word_probability()
+        site_prob = self.get_site_probability()
+        author_prob = self.get_author_probability()
+        return compute_bayes([word_prob, site_prob, author_prob])
+
+    def get_url_tokens(self):
+        tokens = self.get_link().split("/")
+        end = -1
+        if not tokens[-1]: # if url of form http://site/foo/bar/
+            end = -2
+        tokens = tokens[2 : end]
+        return string.join(["url:" + t for t in tokens if chew.acceptable_term(t)])

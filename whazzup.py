@@ -24,6 +24,7 @@ urls = (
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
     '/task/find-feeds-to-check/', 'FindFeedsToCheck',
+    '/task/recalc-sub/(.+)', 'RecalculateSubscription',
     )
 
 def nocache():
@@ -136,16 +137,14 @@ class ImportOPML:
         inf.close()
 
         for newfeed in feeds.get_feeds():
-            feeddb.add_feed_url(newfeed.get_url())
+            controller.add_feed(newfeed.get_url())
         
-        feeddb.save()
         return "<p>Imported.</p>"
     
 class AddFeed:
     def POST(self):
         url = string.strip(web.input().get("url"))
-        feeddb.add_feed_url(url)
-        feeddb.save()
+        controller.add_feed(url)
         return  "<p>Feed added to queue for processing.</p>"
 
 class AddFave:
@@ -221,10 +220,10 @@ class Shutdown:
 class TaskCheckFeed:
 
     def GET(self, key):
-        feeddb.check_feed(key)
+        controller.check_feed(key)
 
     def POST(self, key):
-        feeddb.check_feed(key)
+        controller.check_feed(key)
 
 class FindFeedsToCheck:
 
@@ -233,6 +232,14 @@ class FindFeedsToCheck:
 
     def POST(self):
         controller.find_feeds_to_check()
+
+class RecalculateSubscription: # ie: user x feed
+
+    def GET(self, key):
+        controller.recalculate_subscription(key)
+
+    def POST(self, key):
+        controller.recalculate_subscription(key)
         
 web.webapi.internalerror = web.debugerror
 

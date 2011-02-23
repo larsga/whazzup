@@ -9,6 +9,9 @@ MAX_STORIES = 8000
 
 class DiskController(feedlib.Controller):
 
+    def add_feed(self, feedurl):
+        feeddb.add_feed(rsslib.read_feed(feedurl, wzfactory))
+
     def get_thread_health(self):
         return time.time() - lasttick # FIXME
 
@@ -63,9 +66,6 @@ class FeedDatabase(rsslib.FeedRegistry):
         
     def get_feeds(self):
         return self._feeds
-
-    def add_feed_url(self, feedurl):
-        self.add_feed(rsslib.read_feed(feedurl, wzfactory))
             
     def init(self):
         new_posts = []
@@ -339,7 +339,7 @@ class Feed(rsslib.SiteSummary):
     def set_check_task(self, state):
         self._task_in_queue = state
 
-class Link:
+class Link(feedlib.Post):
 
     def __init__(self, site):
         self._site = site
@@ -386,12 +386,6 @@ class Link:
     def set_pubdate(self, pubdate):
         self._pubdate = pubdate.strip() # must remove ws to simplify parsing
 
-    def get_age(self):
-        age = time.time() - self.get_date().toordinal()
-        if age < 0:
-            age = 3600
-        return age
-
     def get_date(self):
         if not self._date:
             self._date = feedlib.parse_date(self.get_pubdate())
@@ -432,9 +426,6 @@ class Link:
 
     def get_site_probability(self):
         return self.get_site().get_ratio()
-
-    def get_author_vector(self):
-        return vectors.text_to_vector(html2text(self.get_author() or ""))
         
     def get_author_probability(self):
         author = self.get_author()
@@ -443,14 +434,6 @@ class Link:
             return feeddb.get_author_ratio(author)
         else:
             return 0.5
-        
-    def get_overall_probability(self):
-        word_prob = self.get_word_probability()
-        site_prob = self.get_site_probability()
-        author_prob = self.get_author_probability()
-        #prob = word_prob * word_prob * compute_bayes([site_prob, author_prob])
-        prob = feedlib.compute_bayes([word_prob, site_prob, author_prob])
-        return prob
         
     def recalculate(self):
         try:
@@ -484,14 +467,6 @@ class Link:
             
         feeddb.seen_link(self.get_guid())
         # the UI takes care of queueing a recalculation task
-
-    def get_url_tokens(self):
-        tokens = self.get_link().split("/")
-        end = -1
-        if not tokens[-1]: # if url of form http://site/foo/bar/
-            end = -2
-        tokens = tokens[2 : end]
-        return string.join(["url:" + t for t in tokens if chew.acceptable_term(t)])
 
     def get_word_tokens(self):
         probs = []

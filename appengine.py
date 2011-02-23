@@ -8,10 +8,15 @@ from google.appengine.api import urlfetch
     
 import feedlib
 
-# FUNCTIONALITY TO ADD
+# STATUS
 
-# - automatic reprocessing of feeds
-# - calculation of posts
+#  - working on making recalculate_subscription work
+#    - currently on making feed.recalculate() work
+#      - moving code from diskimpl.Link to feedlib.Post in order to reuse
+#        as much code as possible
+#        - need to decide how code accesses the token stats
+#      - add special bits for AppEngine
+#  should be done after that
 
 # --- Controller
 
@@ -19,6 +24,76 @@ class AppEngineController(feedlib.Controller):
 
     def in_appengine(self):
         return True
+
+    def add_feed(self, url):
+        # first check if the feed is in the database at all
+        result = db.GqlQuery("""
+         select * from GAEFeed where xmlurl = :1""", feedurl)
+
+        if not result.count(): # it's not there
+            feed = GAEFeed()
+            feed.xmlurl = feedurl
+            feed.put()
+            feedcreated = True
+        else:
+            feed = result[0]
+            feedcreated = False
+
+        # now add a subscription for this user
+        user = users.get_current_user()
+        result = db.GqlQuery("""
+         select * from GAESubscription where user = :1 and feed = :2
+        """, user, feed)
+
+        if result.count(): # we're subscribed already, so never mind
+            return
+        
+        sub = GAESubscription()
+        sub.user = user
+        sub.feed = feed
+        sub.put()
+
+        if not feedcreated:
+            # the feed was already there and loaded, so just calculate ratings
+            # for this user
+            self.queue_recalculate_subscription(sub)
+
+        # FIXME: if the feed was not already there, I guess we first of all
+        # need to find some content for it
+
+    def queue_recalculate_subscription(self, sub):
+        taskqueue.add(url = "/task/recalc-sub/" + str(key))        
+
+    def recalculate_subscription(self, key):
+        sub = db.get(db.Key(key))
+        lastupdated = sub.user.lastupdate
+
+        # get all existing ratings for this subscription
+        ratings = {} # post.key -> rating
+        for rating in db.GqlQuery("""
+          select * from GAEPostRating where feed = :1""", sub.feed):
+            ratings[rating.post.key()] = rating
+
+        thefeed = FeedWrapper(sub.feed)
+        
+        # evaluate each post to see what to do
+        for post in db.GqlQuery("""
+          select * from GAEPost where feed = :1""", sub.feed):
+            rating = ratings.get(post.key())
+            if not rating:
+                rating = GAEPostRating()
+                rating.post = post
+                rating.user = sub.user
+                rating.feed = post.feed
+            elif rating.calculated > lastupdate:
+                continue # this rating is up to date, so ignore it
+
+            thepost = PostWrapper(thefeed, post)
+            thepost.recalculate()
+            rating.prob = thepost.get_overall_probability()
+            rating.points = thepost.get_points()
+            rating.calculated = datetime.datetime.now()
+            rating.put()
 
     def recalculate_all_posts(self):
         pass
@@ -48,115 +123,8 @@ class AppEngineController(feedlib.Controller):
 
         for key in result:
             taskqueue.add(url = "/task/check-feed/" + str(key))
-                      
-# --- AppEngine implementation
 
-class GAEUser(db.Model):
-    user = db.UserProperty()
-    lastvisit = db.DateTimeProperty()
-
-class GAEFeed(db.Model):
-    xmlurl = db.LinkProperty()
-    htmlurl = db.LinkProperty()
-    title = db.StringProperty()
-    checkinterval = db.IntegerProperty()
-    lastcheck = db.DateTimeProperty()
-    error = db.StringProperty()
-    lasterror = db.DateTimeProperty()
-
-class GAESubscription(db.Model):
-    user = db.UserProperty() # could be reference, too
-    feed = db.ReferenceProperty(GAEFeed)
-    up = db.IntegerProperty()
-    down = db.IntegerProperty()
-
-class GAEPost(db.Model):
-    url = db.LinkProperty()
-    title = db.StringProperty()
-    author = db.StringProperty()
-    pubdate = db.DateTimeProperty()
-    content = db.TextProperty()
-    feed = db.ReferenceProperty(GAEFeed)
-
-# FIXME: choices choices
-# (1) vector, points, subscription    -- duplicates all post info
-# (2) separate GAEPostRating
-#       subscription, vector, points, post (feed in GAEPost)
-    
-# --- SeenPost
-
-# url
-# user
-# datetime
-
-# --- Word
-
-# user
-# word
-# up
-# down
-
-def gae_loader(parser, url):
-    result = urlfetch.fetch(url)
-    if result.status_code != 200:
-        raise IOError("Error retrieving URL")
-
-    parser.feed(result.content)
-    parser.close()
-    
-class GAEFeedDatabase:
-
-    def get_feed_by_id(self, key):
-        return FeedWrapper(db.get(db.Key(key)))
-
-    def add_feed_url(self, feedurl):
-        # first check if the feed is in the database at all
-        result = db.GqlQuery("""
-         select * 
-         from GAEFeed
-         where xmlurl = :1
-        """, feedurl)
-
-        if not result.count(): # it's not there
-            feed = GAEFeed()
-            feed.xmlurl = feedurl
-            feed.put()
-        else:
-            feed = result[0]
-
-        # now add a subscription for this user
-        user = users.get_current_user()
-        result = db.GqlQuery("""
-         select * 
-         from GAESubscription
-         where user = :1 and feed = :2
-        """, user, feed)
-
-        if not result.count(): # it's not there
-            sub = GAESubscription()
-            sub.user = user
-            sub.feed = feed
-            sub.put()
-    
-    def get_item_count(self):
-        return 0
-
-    def get_vote_stats(self):
-        return (0, 0)
-
-    def get_feeds(self):
-        user = users.get_current_user()
-        result = db.GqlQuery("""
-          select *
-          from GAESubscription
-          where user = :1
-        """, user)
-        return [FeedWrapper(sub) for sub in result]
-
-    def save(self):
-        pass # it's a noop on GAE
-
-    # --- specific to GAE
+    # --- specific to GAE (FIXME: but should it be?)
 
     def check_feed(self, key):
         feed = db.get(db.Key(key))
@@ -185,19 +153,102 @@ class GAEFeedDatabase:
         """, feed)
         for post in current_posts:
             post_map[str(post.url)] = post
-        
+
+        newposts = False
         for item in site.get_items():
             post = post_map.get(item.get_link())
             if not post:
                 post = GAEPost()
                 post.url = item.get_link()
                 post.feed = feed
+                newposts = True
 
             post.title = item.get_title()
             post.author = item.get_author()
             post.content = item.get_description()
             post.pubdate = feedlib.parse_date(item.get_pubdate())
             post.put()
+
+        if newposts:
+            # recalculate all subscriptions on this feed
+            for sub in db.GqlQuery("""
+              select * from GAESubscription where feed = :1""", feed):
+                self.queue_recalculate_subscription(sub)
+
+# --- AppEngine implementation
+
+class GAEUser(db.Model):
+    user = db.UserProperty()
+    lastupdate = db.DateTimeProperty()
+    worddb = db.BlobProperty()
+
+class GAEFeed(db.Model):
+    xmlurl = db.LinkProperty()
+    htmlurl = db.LinkProperty()
+    title = db.StringProperty()
+    checkinterval = db.IntegerProperty()
+    lastcheck = db.DateTimeProperty()
+    error = db.StringProperty()
+    lasterror = db.DateTimeProperty()
+
+class GAESubscription(db.Model):
+    user = db.UserProperty()
+    feed = db.ReferenceProperty(GAEFeed)
+    up = db.IntegerProperty()
+    down = db.IntegerProperty()
+
+class GAEPost(db.Model):
+    url = db.LinkProperty()
+    title = db.StringProperty()
+    author = db.StringProperty()
+    pubdate = db.DateTimeProperty()
+    content = db.TextProperty()
+    feed = db.ReferenceProperty(GAEFeed)
+
+class GAEPostRating(db.Model):
+    user = db.UserProperty()             # not sure if this is necessary
+    feed = db.ReferenceProperty(GAEFeed) # non-normalized
+    prob = db.FloatProperty() # means we can do faster time-based recalc
+    points = db.FloatProperty()
+    post = db.ReferenceProperty(GAEPost)
+    calculated = db.DateTimeProperty()
+    
+# --- SeenPost
+
+# url
+# user
+# datetime
+
+def gae_loader(parser, url):
+    result = urlfetch.fetch(url)
+    if result.status_code != 200:
+        raise IOError("Error retrieving URL")
+
+    parser.feed(result.content)
+    parser.close()
+    
+class GAEFeedDatabase:
+
+    def get_feed_by_id(self, key):
+        return FeedWrapper(db.get(db.Key(key)))
+    
+    def get_item_count(self):
+        return 0
+
+    def get_vote_stats(self):
+        return (0, 0)
+
+    def get_feeds(self):
+        user = users.get_current_user()
+        result = db.GqlQuery("""
+          select *
+          from GAESubscription
+          where user = :1
+        """, user)
+        return [FeedWrapper(sub) for sub in result]
+
+    def save(self):
+        pass # it's a noop on GAE
 
 class FeedWrapper:
 
@@ -250,7 +301,7 @@ class FeedWrapper:
     def get_unread_count(self):
         return 0
 
-class PostWrapper:
+class PostWrapper(feedlib.Post):
 
     def __init__(self, parent, post):
         self._parent = parent
