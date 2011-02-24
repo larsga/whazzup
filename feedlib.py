@@ -81,14 +81,44 @@ class Controller:
 
 # --- Model
 
-class Post:
+class Database:
 
+    # backend-specific
+
+    def get_item_range(self, low, high):
+        raise NotImplementedError()
+    
+    def get_word_ratio(self, word):
+        raise NotImplementedError()
+
+    def record_word_vote(self, word, vote):
+        raise NotImplementedError()
+    
+class Post:
+    
+    # shared code
+    
     def get_age(self):
         age = time.time() - self.get_date().toordinal()
         if age < 0:
             age = 3600
         return age
 
+    def get_word_probability(self):
+        probs = []
+        for (word, count) in self.get_vector().get_pairs():
+            for ix in range(count):
+                ratio = feeddb.get_word_ratio(word)
+                probs.append(ratio)
+
+        try:
+            if not probs:
+                return 0.5 # not sure how this could happen, though
+            else:
+                return compute_bayes(probs)
+        except ZeroDivisionError, e:
+            print "ZDE:", self.get_title().encode("utf-8"), probs            
+    
     def get_author_vector(self):
         return vectors.text_to_vector(html2text(self.get_author() or ""))
         
@@ -105,3 +135,61 @@ class Post:
             end = -2
         tokens = tokens[2 : end]
         return string.join(["url:" + t for t in tokens if chew.acceptable_term(t)])
+
+    def get_site_probability(self):
+        return self.get_site().get_ratio()
+        
+    def get_author_probability(self):
+        author = self.get_author()
+        if author:
+            author = string.strip(string.lower(author))
+            return feeddb.get_author_ratio(author)
+        else:
+            return 0.5
+        
+    def recalculate(self):
+        try:
+            prob = self.get_overall_probability()
+            self._points = (prob * 1000.0) / math.log(self.get_age())
+        except ZeroDivisionError, e:
+            #print "--------------------------------------------------"
+            print self.get_title().encode("utf-8")
+            self._points = 0
+    
+    def get_points(self):
+        return self._points
+
+    def is_seen(self):
+        return feeddb.is_link_seen(self.get_guid())
+
+    def record_vote(self, vote):
+        feeddb.remove_item(self)
+
+        if vote != "read":
+            for (word, count) in self.get_vector().get_pairs():
+                for i in range(count):
+                    feeddb.record_word_vote(word, vote)
+            author = self.get_author()
+            if author:
+                author = string.strip(string.lower(author)) # move into feeddb
+                feeddb.record_author_vote(author, vote)
+
+            feeddb.record_site_vote(self.get_site().get_link(), vote)
+            feeddb.commit()
+            
+        feeddb.seen_link(self.get_guid())
+        # the UI takes care of queueing a recalculation task
+
+    def get_word_tokens(self):
+        probs = []
+        for (word, count) in self.get_vector().get_pairs():
+            for ix in range(count):
+                ratio = feeddb.get_word_ratio(word)
+                probs.append("%s : %s" % (escape(word), ratio))
+        return ", ".join(probs)
+
+    def get_vector(self):
+        html = (self.get_title() or "") + " " + (self.get_description() or "")
+        text = html2text(html) + " " + self.get_url_tokens()
+        vector = vectors.text_to_vector(text, {}, None, 1)
+        return vector

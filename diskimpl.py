@@ -35,7 +35,7 @@ class DiskController(feedlib.Controller):
             
 # --- Model
 
-class FeedDatabase(rsslib.FeedRegistry):
+class FeedDatabase(rsslib.FeedRegistry, feedlib.Database):
 
     def __init__(self):
         rsslib.FeedRegistry.__init__(self)
@@ -366,17 +366,6 @@ class Link(feedlib.Post):
     def set_description(self, descr):
         cache[str(id(self)) + "descr"] = descr
 
-    def get_vector(self):
-        key = str(id(self)) + "vector"
-        if cache.has_key(key):
-            vector = cache[key]
-        else:
-            html = (self.get_title() or "") + " " + (self.get_description() or "")
-            text = feedlib.html2text(html) + " " + self.get_url_tokens()
-            vector = vectors.text_to_vector(text, {}, None, 1)
-            cache[key] = vector
-        return vector
-
     def get_pubdate(self):
         return self._pubdate
 
@@ -385,11 +374,6 @@ class Link(feedlib.Post):
 
     def set_pubdate(self, pubdate):
         self._pubdate = pubdate.strip() # must remove ws to simplify parsing
-
-    def get_date(self):
-        if not self._date:
-            self._date = feedlib.parse_date(self.get_pubdate())
-        return self._date
 
     def get_site(self):
         return self._site
@@ -405,76 +389,25 @@ class Link(feedlib.Post):
 
     def set_author(self, author):
         self._author = author
-    
-    def get_points(self):
-        return self._points
-
-    def get_word_probability(self):
-        probs = []
-        for (word, count) in self.get_vector().get_pairs():
-            for ix in range(count):
-                ratio = feeddb.get_word_ratio(word)
-                probs.append(ratio)
-
-        try:
-            if not probs:
-                return 0.5 # not sure how this could happen, though
-            else:
-                return feedlib.compute_bayes(probs)
-        except ZeroDivisionError, e:
-            print "ZDE:", self.get_title().encode("utf-8"), probs            
-
-    def get_site_probability(self):
-        return self.get_site().get_ratio()
-        
-    def get_author_probability(self):
-        author = self.get_author()
-        if author:
-            author = string.strip(string.lower(author))
-            return feeddb.get_author_ratio(author)
-        else:
-            return 0.5
-        
-    def recalculate(self):
-        try:
-            prob = self.get_overall_probability()
-            self._points = (prob * 1000.0) / math.log(self.get_age())
-        except ZeroDivisionError, e:
-            #print "--------------------------------------------------"
-            print self.get_title().encode("utf-8")
-            self._points = 0
-
-    def is_seen(self):
-        return feeddb.is_link_seen(self.get_guid())
 
     def get_local_id(self):
         return id(self)
 
-    def record_vote(self, vote):
-        feeddb.remove_item(self)
-
-        if vote != "read":
-            for (word, count) in self.get_vector().get_pairs():
-                for i in range(count):
-                    feeddb.record_word_vote(word, vote)
-            author = self.get_author()
-            if author:
-                author = string.strip(string.lower(author)) # move into feeddb
-                feeddb.record_author_vote(author, vote)
-
-            feeddb.record_site_vote(self.get_site().get_link(), vote)
-            feeddb.commit()
-            
-        feeddb.seen_link(self.get_guid())
-        # the UI takes care of queueing a recalculation task
-
-    def get_word_tokens(self):
-        probs = []
-        for (word, count) in self.get_vector().get_pairs():
-            for ix in range(count):
-                ratio = feeddb.get_word_ratio(word)
-                probs.append("%s : %s" % (escape(word), ratio))
-        return ", ".join(probs)
+    def get_date(self):
+        if not self._date:
+            self._date = feedlib.parse_date(self.get_pubdate())
+        return self._date
+    
+    def get_vector(self): # override to get caching
+        key = str(id(self)) + "vector"
+        if cache.has_key(key):
+            vector = cache[key]
+        else:
+            html = (self.get_title() or "") + " " + (self.get_description() or "")
+            text = feedlib.html2text(html) + " " + self.get_url_tokens()
+            vector = vectors.text_to_vector(text, {}, None, 1)
+            cache[key] = vector
+        return vector
 
 class Word:
 
@@ -708,6 +641,7 @@ socket.setdefaulttimeout(20)
 wzfactory = WhazzupFactory()
 feeddb = get_feeds()
 controller = DiskController()
+feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 
 # ----- STARTING THREAD
 

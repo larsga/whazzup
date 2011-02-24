@@ -28,11 +28,11 @@ class AppEngineController(feedlib.Controller):
     def add_feed(self, url):
         # first check if the feed is in the database at all
         result = db.GqlQuery("""
-         select * from GAEFeed where xmlurl = :1""", feedurl)
+         select * from GAEFeed where xmlurl = :1""", url)
 
         if not result.count(): # it's not there
             feed = GAEFeed()
-            feed.xmlurl = feedurl
+            feed.xmlurl = url
             feed.subscribers = 1
         else:
             feed = result[0]
@@ -64,7 +64,9 @@ class AppEngineController(feedlib.Controller):
 
     def recalculate_subscription(self, key):
         sub = db.get(db.Key(key))
-        lastupdated = sub.user.lastupdate
+        if not hasattr(sub.user, "lastupdate"):
+            sub.user.lastupdate = None
+        lastupdate = sub.user.lastupdate or datetime.datetime.now()
 
         # get all existing ratings for this subscription
         ratings = {} # post.key -> rating
@@ -72,7 +74,7 @@ class AppEngineController(feedlib.Controller):
           select * from GAEPostRating where feed = :1""", sub.feed):
             ratings[rating.post.key()] = rating
 
-        thefeed = FeedWrapper(sub.feed)
+        thefeed = FeedWrapper(sub)
         
         # evaluate each post to see what to do
         for post in db.GqlQuery("""
@@ -86,7 +88,7 @@ class AppEngineController(feedlib.Controller):
             elif rating.calculated > lastupdate:
                 continue # this rating is up to date, so ignore it
 
-            thepost = PostWrapper(thefeed, post)
+            thepost = PostWrapper(post, thefeed)
             thepost.recalculate()
             rating.prob = thepost.get_overall_probability()
             rating.points = thepost.get_points()
@@ -170,7 +172,7 @@ class AppEngineController(feedlib.Controller):
         if newposts:
             # recalculate all subscriptions on this feed
             for sub in db.GqlQuery("""
-              select * from GAESubscription where feed = :1""", feed):
+              select __key__ from GAESubscription where feed = :1""", feed):
                 self.queue_recalculate_subscription(sub)
 
     # definitely specific to GAE
@@ -185,8 +187,12 @@ class AppEngineController(feedlib.Controller):
 
     # methods to queue tasks
 
-    def queue_recalculate_subscription(self, sub):
-        taskqueue.add(url = "/task/recalc-sub/" + str(key))        
+    def queue_recalculate_subscription(self, suborkey):
+        if isinstance(suborkey, GAESubscription):
+            key = suborkey.key()
+        else:
+            key = suborkey
+        taskqueue.add(url = "/task/recalc-sub/" + str(key))
 
     def queue_check_feed(self, keyorfeed):
         if isinstance(keyorfeed, GAEFeed):
@@ -248,8 +254,18 @@ def gae_loader(parser, url):
     parser.feed(result.content)
     parser.close()
     
-class GAEFeedDatabase:
+class GAEFeedDatabase(feedlib.Database):
 
+    def get_item_range(self, low, high):
+        user = users.get_current_user()
+        query = ("""
+          select * from GAEPostRating where user = :1
+          order by points desc
+          limit %s offset %s
+        """ % ((high - low), low))
+        result = db.GqlQuery(query, user)
+        return [PostWrapper(rating.post) for rating in result]
+    
     def get_feed_by_id(self, key):
         return FeedWrapper(db.get(db.Key(key)))
     
@@ -270,6 +286,12 @@ class GAEFeedDatabase:
 
     def save(self):
         pass # it's a noop on GAE
+
+    def get_word_ratio(self, word):
+        return 0.5 # FIXME
+
+    def get_author_ratio(self, word):
+        return 0.5 # FIXME
 
 class FeedWrapper:
 
@@ -307,7 +329,7 @@ class FeedWrapper:
           from GAEPost
           where feed = :1
         """, self._feed)
-        return [PostWrapper(self, post) for post in result]
+        return [PostWrapper(post, self) for post in result]
 
     def get_time_to_wait(self):
         return self._feed.checkinterval
@@ -324,9 +346,12 @@ class FeedWrapper:
 
 class PostWrapper(feedlib.Post):
 
-    def __init__(self, parent, post):
-        self._parent = parent
+    def __init__(self, post, parent = None):
         self._post = post
+        if parent:
+            self._parent = parent
+        else:
+            self._parent = FeedWrapper(post.feed)
 
     def get_title(self):
         return self._post.title
@@ -346,5 +371,12 @@ class PostWrapper(feedlib.Post):
     def get_site(self):
         return self._parent
 
+    def get_description(self):
+        return self._post.content
+
+    def get_date(self):
+        return self._post.pubdate
+
 controller = AppEngineController()
 feeddb = GAEFeedDatabase()
+feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool

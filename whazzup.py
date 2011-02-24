@@ -44,9 +44,8 @@ class List:
         else:
             page = 0
 
-        low = min(page * 25, feeddb.get_item_count())
-        high = min(low + 25, feeddb.get_item_count())
-
+        low = page * 25
+        high = low + 25
         return render.storylist(page,
                                 self.get_thread_health(),
                                 low, high,

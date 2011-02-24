@@ -8,8 +8,8 @@ $def with (page, thread_health, low, high, feeddb)
 <div class=health>$:thread_health<br>Items: $(feeddb.get_item_count())</div>
 
 <table>
-$for ix in range(low, high):
-    $ item = feeddb.get_item_no(ix)
+$ ix = low
+$for item in feeddb.get_item_range(low, high):
     <tr><td>$(ix + 1).
     <td><a href="/vote/up/$(item.get_local_id())"><img src=static/up.png></a>
     <td><a href="/faveform/$(item.get_local_id())"><img src=static/star.png></a>
@@ -23,6 +23,8 @@ $for ix in range(low, high):
     $if item.get_author():
         , $(item.get_author())
     <a href="/item/$(item.get_local_id())" style="color: inherit">[*]</a>
+
+    $ ix += 1
 
 </table>
 
