@@ -6,13 +6,13 @@ import web
 
 urls = (
     '/(\d*)', 'List',
-    '/vote/(up|down|read|star)/(\d+)', 'Vote',
+    '/vote/(up|down|read|star)/(.+)', 'Vote',
     '/sites', 'Sites',
     '/site/(.+)', 'SiteReport',
     '/update-site/(\d+)', 'UpdateSite',
     '/delete-site/(\d+)', 'DeleteSite',
     '/start-thread', 'StartThread',
-    '/item/(\d+)', 'ShowItem',
+    '/item/(.+)', 'ShowItem',
     '/reload', 'Reload',
     '/addfeed', 'AddFeed',
     '/addfave', 'AddFave',
@@ -106,7 +106,7 @@ class Vote:
     def GET(self, vote, id):
         nocache()
         link = feeddb.get_item_by_id(id)
-        link.record_vote(vote) # FIXME: is this going to work
+        link.record_vote(vote)
         if vote != "read":
             controller.recalculate_all_posts() # since scores have changed
         web.seeother("/") # FIXME
@@ -115,7 +115,7 @@ class ShowItem:
     def GET(self, id):
         nocache()
         try:
-            item = feeddb.get_item_by_id(int(id))
+            item = feeddb.get_item_by_id(id)
             return render.item(item, string, math, feeddb)
         except KeyError, e:
             return "No such item: " + repr(id)

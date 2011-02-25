@@ -172,9 +172,6 @@ class FeedDatabase(rsslib.FeedRegistry, feedlib.Database):
 
     def get_word_ratio(self, word):
         return self._words.get_word_ratio(word)
-
-    def record_word_vote(self, word, vote):
-        self._words.record_vote(word, vote)
         
     def get_site_ratio(self, link):
         return self._sites.get_word_ratio(link)

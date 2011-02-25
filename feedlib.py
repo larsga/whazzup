@@ -85,16 +85,34 @@ class Database:
 
     def __init__(self):
         pass
-    
+
+    def record_word_vote(self, word, vote):
+        self._get_word_db().record_vote(word, vote)
+
+    def record_author_vote(self, author, vote):
+        self._get_author_db().record_vote(author, vote)
+
+    def record_site_vote(self, site, vote):
+        self._get_site_db().record_vote(site, vote)
+        
     # backend-specific
 
+    def commit(self):
+        raise NotImplementedError()
+        
     def get_item_range(self, low, high):
         raise NotImplementedError()
     
     def get_word_ratio(self, word):
         raise NotImplementedError()
 
-    def record_word_vote(self, word, vote):
+    def _get_word_db(self):
+        raise NotImplementedError()
+
+    def _get_author_db(self):
+        raise NotImplementedError()
+
+    def _get_site_db(self):
         raise NotImplementedError()
     
 class Post:
@@ -180,7 +198,7 @@ class Post:
             feeddb.record_site_vote(self.get_site().get_link(), vote)
             feeddb.commit()
             
-        feeddb.seen_link(self.get_guid())
+        feeddb.seen_link(self)
         # the UI takes care of queueing a recalculation task
 
     def get_word_tokens(self):
@@ -227,7 +245,7 @@ class WordDatabase:
         self._put_object(theword, ratio)
 
     def _get_object(self, key):
-        return self._words[key]
+        return self._words.get(key, (0, 0))
 
     def _put_object(self, key, ratio):
         self._words[key] = ratio

@@ -59,17 +59,29 @@ class AppEngineController(feedlib.Controller):
 
     def recalculate_subscription(self, key):
         sub = db.get(db.Key(key))
-        userobj = db.GqlQuery("select * from GAEUser where user = :1", sub.user)
-        if userobj.count() > 0:
+        result = db.GqlQuery("select * from GAEUser where user = :1", sub.user)
+        if result.count() > 0:
+            userobj = result[0]
             lastupdate = userobj.lastupdate or datetime.datetime.now()
         else:
             lastupdate = datetime.datetime.now()
 
+        # get all seen posts for this subscription
+        ratings = {} # post.key -> (rating | seen)
+        for seen in db.GqlQuery("""
+          select * from GAESeenPost where feed = :1 and user = :2""",
+                                sub.feed, sub.user):
+            ratings[seen.post.key()] = seen
+            
         # get all existing ratings for this subscription
-        ratings = {} # post.key -> rating
         for rating in db.GqlQuery("""
-          select * from GAEPostRating where feed = :1""", sub.feed):
-            ratings[rating.post.key()] = rating
+          select * from GAEPostRating where feed = :1 and user = :2""",
+                                  sub.feed, sub.user):
+            key = rating.post.key()
+            if ratings.has_key(key):
+                rating.delete() # means we've already seen this post
+            else:
+                ratings[key] = rating
 
         thefeed = FeedWrapper(sub)
         
@@ -82,6 +94,9 @@ class AppEngineController(feedlib.Controller):
                 rating.post = post
                 rating.user = sub.user
                 rating.feed = post.feed
+            elif isinstance(rating, GAESeenPost):
+                rating.delete() # we've already seen this post, so remove rating
+                continue
             elif rating.calculated > lastupdate:
                 continue # this rating is up to date, so ignore it
 
@@ -93,7 +108,9 @@ class AppEngineController(feedlib.Controller):
             rating.put()
 
     def recalculate_all_posts(self):
-        pass # FIXME: implement this!
+        user = users.get_current_user()
+        for sub in db.GqlQuery("select __key__ from GAESubscription where user = :1", user):
+            self.queue_recalculate_subscription(sub)
 
     def start_feed_reader(self):
         pass
@@ -236,12 +253,11 @@ class GAEPostRating(db.Model):
     points = db.FloatProperty()
     post = db.ReferenceProperty(GAEPost)
     calculated = db.DateTimeProperty()
-    
-# --- SeenPost
 
-# url
-# user
-# datetime
+class GAESeenPost(db.Model):
+    user = db.UserProperty()
+    feed = db.ReferenceProperty(GAEFeed) # non-normalized
+    post = db.ReferenceProperty(GAEPost)
 
 def gae_loader(parser, url):
     result = urlfetch.fetch(url)
@@ -256,6 +272,9 @@ class GAEFeedDatabase(feedlib.Database):
     def __init__(self):
         feedlib.Database.__init__(self)
         self._worddb = None
+
+    def get_item_by_id(self, key):
+        return PostWrapper(db.get(db.Key(key)))
     
     def get_item_range(self, low, high):
         user = users.get_current_user()
@@ -278,27 +297,51 @@ class GAEFeedDatabase(feedlib.Database):
 
     def get_feeds(self):
         user = users.get_current_user()
-        result = db.GqlQuery("""
-          select *
-          from GAESubscription
-          where user = :1
-        """, user)
+        result = db.GqlQuery("select * from GAESubscription where user = :1",
+                             user)
         return [FeedWrapper(sub) for sub in result]
 
     def save(self):
         pass # it's a noop on GAE
 
+    def commit(self):
+        self._get_word_db().close()
+
     def get_word_ratio(self, word):
-        return 0.5 # FIXME
+        worddb = self._get_word_db()
+        return worddb.get_word_ratio(word)
 
     def get_author_ratio(self, word):
         return 0.5 # FIXME
 
+    def remove_item(self, item):
+        pass # I think we don't need this one
+
+    def seen_link(self, post):
+        post = post._post
+        user = users.get_current_user()
+        for rating in db.GqlQuery("""select * from GAEPostRating
+                                  where post = :1 and user = :2""",
+                                  post, user):
+            rating.delete()
+
+        seen = GAESeenPost()
+        seen.user = user
+        seen.feed = post.feed # yuk
+        seen.post = post
+        seen.put()
+        
     def _get_word_db(self):
         if not self._worddb:
             self._worddb = AppEngineWordDatabase()
         return self._worddb
 
+    def _get_author_db(self):
+        return self._get_word_db()
+
+    def _get_site_db(self):
+        return self._get_word_db()
+    
 class FeedWrapper:
 
     def __init__(self, obj):
@@ -392,11 +435,11 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
         self._changed = False
         worddb = {}
         
-        if results:
+        if results.count() > 0:
             self._user = results[0]
             blob = results[0].worddb
             if blob:
-                worddb = marshal.load(StringIO(blob))
+                worddb = marshal.loads(blob)
 
         feedlib.WordDatabase.__init__(self, worddb)
 
@@ -412,10 +455,8 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
         if self._changed:
             if not self._user:
                 self._user = GAEUser()
-                self._user.user = users.get_current_user()
-            io = StringIO()
-            marshal.dump(self._words, io)
-            self._user.worddb = io.getvalue()
+                self._user.user = users.get_current_user()            
+            self._user.worddb = marshal.dumps(self._words)
             self._user.lastupdate = datetime.datetime.now()
             self._user.put()
     
