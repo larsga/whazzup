@@ -1,5 +1,5 @@
 
-import datetime, traceback, rsslib
+import datetime, traceback, rsslib, marshal, StringIO
 
 from google.appengine.api import taskqueue
 from google.appengine.api import users
@@ -10,13 +10,8 @@ import feedlib
 
 # STATUS
 
-#  - working on making recalculate_subscription work
-#    - currently on making feed.recalculate() work
-#      - moving code from diskimpl.Link to feedlib.Post in order to reuse
-#        as much code as possible
-#        - need to decide how code accesses the token stats
-#      - add special bits for AppEngine
-#  should be done after that
+# - working on making voting work
+#   check comments in whazzup.Vote for status
 
 # --- Controller
 
@@ -64,9 +59,11 @@ class AppEngineController(feedlib.Controller):
 
     def recalculate_subscription(self, key):
         sub = db.get(db.Key(key))
-        if not hasattr(sub.user, "lastupdate"):
-            sub.user.lastupdate = None
-        lastupdate = sub.user.lastupdate or datetime.datetime.now()
+        userobj = db.GqlQuery("select * from GAEUser where user = :1", sub.user)
+        if userobj.count() > 0:
+            lastupdate = userobj.lastupdate or datetime.datetime.now()
+        else:
+            lastupdate = datetime.datetime.now()
 
         # get all existing ratings for this subscription
         ratings = {} # post.key -> rating
@@ -96,7 +93,7 @@ class AppEngineController(feedlib.Controller):
             rating.put()
 
     def recalculate_all_posts(self):
-        pass
+        pass # FIXME: implement this!
 
     def start_feed_reader(self):
         pass
@@ -256,6 +253,10 @@ def gae_loader(parser, url):
     
 class GAEFeedDatabase(feedlib.Database):
 
+    def __init__(self):
+        feedlib.Database.__init__(self)
+        self._worddb = None
+    
     def get_item_range(self, low, high):
         user = users.get_current_user()
         query = ("""
@@ -292,6 +293,11 @@ class GAEFeedDatabase(feedlib.Database):
 
     def get_author_ratio(self, word):
         return 0.5 # FIXME
+
+    def _get_word_db(self):
+        if not self._worddb:
+            self._worddb = AppEngineWordDatabase()
+        return self._worddb
 
 class FeedWrapper:
 
@@ -377,6 +383,42 @@ class PostWrapper(feedlib.Post):
     def get_date(self):
         return self._post.pubdate
 
+class AppEngineWordDatabase(feedlib.WordDatabase):
+
+    def __init__(self):        
+        user = users.get_current_user()
+        results = db.GqlQuery("select * from GAEUser where user = :1", user)
+        self._user = None
+        self._changed = False
+        worddb = {}
+        
+        if results:
+            self._user = results[0]
+            blob = results[0].worddb
+            if blob:
+                worddb = marshal.load(StringIO(blob))
+
+        feedlib.WordDatabase.__init__(self, worddb)
+
+    def record_vote(self, theword, vote):
+        feedlib.WordDatabase.record_vote(self, theword, vote)
+        self._changed = True
+
+    def change_word(self, oldword, newword):
+        feedlib.WordDatabase.change_word(self, oldword, newword)
+        self._changed = True
+        
+    def close(self):
+        if self._changed:
+            if not self._user:
+                self._user = GAEUser()
+                self._user.user = users.get_current_user()
+            io = StringIO()
+            marshal.dump(self._words, io)
+            self._user.worddb = io.getvalue()
+            self._user.lastupdate = datetime.datetime.now()
+            self._user.put()
+    
 controller = AppEngineController()
 feeddb = GAEFeedDatabase()
 feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool

@@ -105,12 +105,11 @@ class Sites:
 class Vote:
     def GET(self, vote, id):
         nocache()
-        link = feeddb.get_item_by_id(int(id))
-        ix = feeddb.get_no_of_item(link)
-        link.record_vote(vote)
+        link = feeddb.get_item_by_id(id)
+        link.record_vote(vote) # FIXME: is this going to work
         if vote != "read":
             controller.recalculate_all_posts() # since scores have changed
-        web.seeother("/%s" % (ix / 25))
+        web.seeother("/") # FIXME
 
 class ShowItem:
     def GET(self, id):

@@ -83,6 +83,9 @@ class Controller:
 
 class Database:
 
+    def __init__(self):
+        pass
+    
     # backend-specific
 
     def get_item_range(self, low, high):
@@ -193,3 +196,41 @@ class Post:
         text = html2text(html) + " " + self.get_url_tokens()
         vector = vectors.text_to_vector(text, {}, None, 1)
         return vector
+
+# --- Word database
+
+# FIXME: this needs to be properly generalized
+
+class WordDatabase:
+
+    def __init__(self, words):
+        self._words = words # a dict, of some kind, possibly a dbm
+
+    def get_word_ratio(self, word):
+        (good, bad) = self._get_object(word)
+        return float(good + START_VOTES) / (good + bad + START_VOTES * 2)
+
+    def get_word_stats(self, word):
+        return self._get_object(word)
+
+    def record_vote(self, theword, vote):
+        (good, bad) = self._get_object(theword)
+        if vote == "up":
+            good += 1
+        else:
+            bad += 1
+        self._put_object(theword, (good, bad))
+
+    def change_word(self, oldword, newword):
+        ratio = self.get_word_ratio(oldword)
+        del self._words[oldword.encode("utf-8")]
+        self._put_object(theword, ratio)
+
+    def _get_object(self, key):
+        return self._words[key]
+
+    def _put_object(self, key, ratio):
+        self._words[key] = ratio
+
+    def close(self):
+        raise NotImplementedError()
