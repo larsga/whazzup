@@ -1,5 +1,5 @@
 
-import datetime, traceback, rsslib, marshal, StringIO
+import datetime, traceback, rsslib, marshal, StringIO, logging, time
 
 from google.appengine.api import taskqueue
 from google.appengine.api import users
@@ -15,6 +15,10 @@ import feedlib
 #  - need to add purging of old posts
 #  - what about feeds which have no subscribers?
 #  - display item stats doesn't work
+#  - urlfetch is not returning Unicode, but only ascii
+
+def toseconds(timestamp):
+    return time.mktime(timestamp.timetuple())    
 
 # --- Controller
 
@@ -121,7 +125,6 @@ class AppEngineController(feedlib.Controller):
             self.queue_age_subscription(sub)
 
     def age_subscription(self, key):
-        print repr(key)
         sub = db.get(db.Key(key))
         for rating in db.GqlQuery("""select * from GAESubscription
                                   where user = :1 and feed = :2""",
@@ -148,10 +151,7 @@ class AppEngineController(feedlib.Controller):
             self.queue_check_feed(key)
         
         result = db.GqlQuery("""
-         select __key__
-         from GAEFeed
-         where lastcheck < :1
-        """, checktime)
+         select __key__ from GAEFeed where lastcheck < :1""", checktime)
 
         for key in result:
             self.queue_check_feed(key)
@@ -286,7 +286,22 @@ def gae_loader(parser, url):
     if result.status_code != 200:
         raise IOError("Error retrieving URL")
 
-    parser.feed(result.content)
+    # charset = "iso-8859-1"
+    # if result.headers.has_key("content-type"):
+    #     ctype = result.headers["content-type"]
+    #     pos = ctype.find("charset=")
+    #     if pos == -1:
+    #         logging.warn("Content-type had no charset: " + repr(ctype))
+    #     else:
+    #         charset = ctype[pos + len("charset=") : ]
+
+    # try:
+    #     data = result.content.decode(charset)
+    # except LookupError:
+    #     data = result.content.decode("iso-8859-1")
+    data = result.content # FIXME: how to turn this into unicode?3
+            
+    parser.feed(data)
     parser.close()
     
 class GAEFeedDatabase(feedlib.Database):
@@ -406,6 +421,9 @@ class FeedWrapper:
         return self._feed.checkinterval
 
     def time_since_last_read(self):
+        "Seconds since last read."
+        if self._feed.lastcheck:
+            return time.time() - toseconds(self._feed.lastcheck)
         return 0
 
     def is_being_read(self):
