@@ -26,6 +26,8 @@ urls = (
     '/task/find-feeds-to-check/', 'FindFeedsToCheck',
     '/task/recalc-sub/(.+)', 'RecalculateSubscription',
     '/task/remove-dead-feeds/', 'RemoveDeadFeeds',
+    '/task/age-posts/', 'AgePosts',
+    '/task/age-subscription/(.+)', 'AgeSubscription',
     )
 
 def nocache():
@@ -44,6 +46,10 @@ class List:
         else:
             page = 0
 
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+            
         low = page * 25
         high = low + 25
         return render.storylist(page,
@@ -247,6 +253,22 @@ class RemoveDeadFeeds:
 
     def POST(self):
         controller.remove_dead_feeds()
+
+class AgePosts:
+
+    def GET(self):
+        controller.age_posts()
+
+    def POST(self):
+        controller.age_posts()
+
+class AgeSubscription:
+
+    def GET(self, key):
+        controller.age_subscription(key)
+
+    def POST(self, key):
+        controller.age_subscription(key)
         
 web.webapi.internalerror = web.debugerror
 

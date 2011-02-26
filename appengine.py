@@ -10,8 +10,11 @@ import feedlib
 
 # STATUS
 
-# - working on making voting work
-#   check comments in whazzup.Vote for status
+#  - author and site ratios are dubious
+#  - does aging ratings really have any effect?
+#  - need to add purging of old posts
+#  - what about feeds which have no subscribers?
+#  - display item stats doesn't work
 
 # --- Controller
 
@@ -94,6 +97,7 @@ class AppEngineController(feedlib.Controller):
                 rating.post = post
                 rating.user = sub.user
                 rating.feed = post.feed
+                rating.postdate = post.pubdate
             elif isinstance(rating, GAESeenPost):
                 rating.delete() # we've already seen this post, so remove rating
                 continue
@@ -108,9 +112,26 @@ class AppEngineController(feedlib.Controller):
             rating.put()
 
     def recalculate_all_posts(self):
-        user = users.get_current_user()
+        user = users.get_current_user() # FIXME: need user key here
         for sub in db.GqlQuery("select __key__ from GAESubscription where user = :1", user):
             self.queue_recalculate_subscription(sub)
+
+    def age_posts(self):
+        for sub in db.GqlQuery("select __key__ from GAESubscription"):
+            self.queue_age_subscription(sub)
+
+    def age_subscription(self, key):
+        print repr(key)
+        sub = db.get(db.Key(key))
+        for rating in db.GqlQuery("""select * from GAESubscription
+                                  where user = :1 and feed = :2""",
+                                  sub.user, sub.feed):
+            if hasattr(rating, "postdate"):
+                date = rating.postdate
+            else:
+                date = rating.post.pubdate
+            rating.points = feedlib.calculate_points(rating.points, date)
+            rating.put()
 
     def start_feed_reader(self):
         pass
@@ -121,10 +142,7 @@ class AppEngineController(feedlib.Controller):
         checktime = now - delta
 
         result = db.GqlQuery("""
-         select __key__
-         from GAEFeed
-         where lastcheck = NULL 
-        """)
+         select __key__ from GAEFeed where lastcheck = NULL""")
 
         for key in result:
             self.queue_check_feed(key)
@@ -201,6 +219,9 @@ class AppEngineController(feedlib.Controller):
 
     # methods to queue tasks
 
+    def queue_age_subscription(self, key):
+        taskqueue.add(url = "/task/age-subscription/" + str(key))
+
     def queue_recalculate_subscription(self, suborkey):
         if isinstance(suborkey, GAESubscription):
             key = suborkey.key()
@@ -250,6 +271,7 @@ class GAEPostRating(db.Model):
     user = db.UserProperty()             # not sure if this is necessary
     feed = db.ReferenceProperty(GAEFeed) # non-normalized
     prob = db.FloatProperty() # means we can do faster time-based recalc
+    postdate = db.DateTimeProperty() # ditto
     points = db.FloatProperty()
     post = db.ReferenceProperty(GAEPost)
     calculated = db.DateTimeProperty()

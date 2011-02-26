@@ -65,6 +65,12 @@ def parse_date(datestring):
 
     return datetime.utcnow()
 
+def calculate_points(prob, postdate):
+    age = time.time() - postdate.toordinal()
+    if age < 0:
+        age = 3600
+    return (prob * 1000.0) / math.log(age)
+
 # --- Controller
 
 class Controller:
@@ -118,12 +124,6 @@ class Database:
 class Post:
     
     # shared code
-    
-    def get_age(self):
-        age = time.time() - self.get_date().toordinal()
-        if age < 0:
-            age = 3600
-        return age
 
     def get_word_probability(self):
         probs = []
@@ -171,7 +171,7 @@ class Post:
     def recalculate(self):
         try:
             prob = self.get_overall_probability()
-            self._points = (prob * 1000.0) / math.log(self.get_age())
+            self._points = calculate_points(prob, self.get_date())
         except ZeroDivisionError, e:
             #print "--------------------------------------------------"
             print self.get_title().encode("utf-8")
