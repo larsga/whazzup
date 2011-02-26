@@ -10,15 +10,22 @@ import feedlib
 
 # STATUS
 
+#  - site ratio is misreported in site list
+#  - support for removing feeds
 #  - author and site ratios are dubious
 #  - does aging ratings really have any effect?
 #  - need to add purging of old posts
 #  - what about feeds which have no subscribers?
-#  - display item stats doesn't work
-#  - urlfetch is not returning Unicode, but only ascii
+#  - urlfetch is not returning Unicode, but only ascii -> site stats issue
 
 def toseconds(timestamp):
     return time.mktime(timestamp.timetuple())    
+
+def get_object(query, *params):
+    params = [query] + list(params)
+    result = apply(db.GqlQuery, params)
+    if result.count() > 0:
+        return result[0]
 
 # --- Controller
 
@@ -103,8 +110,7 @@ class AppEngineController(feedlib.Controller):
                 rating.feed = post.feed
                 rating.postdate = post.pubdate
             elif isinstance(rating, GAESeenPost):
-                rating.delete() # we've already seen this post, so remove rating
-                continue
+                continue # we've seen this post before, so move on
             elif rating.calculated > lastupdate:
                 continue # this rating is up to date, so ignore it
 
@@ -367,6 +373,9 @@ class GAEFeedDatabase(feedlib.Database):
         seen.feed = post.feed # yuk
         seen.post = post
         seen.put()
+
+    def get_no_of_item(self, item):
+        return 0 # FIXME: we can't compute this
         
     def _get_word_db(self):
         if not self._worddb:
@@ -387,6 +396,7 @@ class FeedWrapper:
             self._feed = obj.feed
         else:
             self._feed = obj
+            self._sub = None
             # better not try to touch self._sub here...
 
     def get_url(self):
@@ -399,6 +409,7 @@ class FeedWrapper:
         return self._feed.title or "[No title]"
 
     def get_ratio(self):
+        sub = self._get_sub()
         up = (self._sub.up or 0) + feedlib.START_VOTES
         down = (self._sub.down or 0) + feedlib.START_VOTES
         return up / float(up + down)
@@ -429,6 +440,13 @@ class FeedWrapper:
     def is_being_read(self):
         return False
 
+    def _get_sub(self):
+        if not self._sub:
+            self._sub = get_object("""select * from GAESubscription
+                             where user = :1 and feed = :2""",
+                             users.get_current_user(), self._feed)
+        return self._sub
+    
     # this must be precomputed and stored if we are going to do it at all
     def get_unread_count(self):
         return 0
@@ -442,6 +460,9 @@ class PostWrapper(feedlib.Post):
         else:
             self._parent = FeedWrapper(post.feed)
 
+    def get_guid(self):
+        return self._post.key()
+            
     def get_title(self):
         return self._post.title
 
@@ -465,6 +486,20 @@ class PostWrapper(feedlib.Post):
 
     def get_date(self):
         return self._post.pubdate
+
+    def get_pubdate(self):
+        return str(self._post.pubdate)
+
+    def get_age(self):
+        age = time.time() - self._post.pubdate.toordinal()
+        if age < 0:
+            age = 3600
+        return age
+
+    def get_points(self):
+        if not hasattr(self, "_points"):
+            self.recalculate()
+        return self._points
 
 class AppEngineWordDatabase(feedlib.WordDatabase):
 

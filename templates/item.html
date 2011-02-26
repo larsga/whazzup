@@ -1,8 +1,7 @@
 $def with (item, string, math, feeddb)
 
-<style>
-th { text-align: left }
-</style>
+<link rel=stylesheet type="text/css" href="/static/style.css">
+
 <h1>$(item.get_title())</h1>
 <p>$(item.get_site().get_title())
 $if item.get_author():
@@ -21,7 +20,7 @@ $if item.get_author():
 <tr><th>Points <td>$item.get_points()
 $if not item.is_seen():
     <tr><th>Position <td>$(feeddb.get_no_of_item(item))
-<tr><th>URL <td>$item.get_link()
+<tr><th>URL <td><a href="$item.get_link()">$item.get_link()</a>
 <tr><th>GUID <td>$item.get_guid()
 $ site = item.get_site()
 <tr><th>Feed <td><a href="/site/$(site.get_local_id())">$(site.get_title())</a>
