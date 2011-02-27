@@ -1,0 +1,26 @@
+$def with (feeds)
+
+<link rel=stylesheet type="text/css" href="static/style.css">
+
+<title>What's up - Popular feeds</title>
+<h1>Popular feeds</h1>
+
+<p>These are feeds with the most subscribers in the system. Click
+the plus button to subscribe to one of them.</p>
+
+<table>
+<tr><th>Add
+    <th>Feed
+    <th>Posts
+    <th>Last checked
+      
+$for site in feeds:
+    $ id = site.get_local_id()
+    <tr>
+    <td>
+    $if not site.is_subscribed():
+        <a href="/subscribe-site/$id"><img src=static/star.png></a>
+    <td><a href="site/$id">$(site.get_title())</a>
+    <td>$(len(site.get_items()))
+    <td>$(site.nice_time_since_last_read())
+</table>

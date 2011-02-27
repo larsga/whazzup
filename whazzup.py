@@ -20,6 +20,7 @@ urls = (
     '/faveform/(\d*)', 'FaveForm',
     '/recalc', 'Recalculate',
     '/uploadopml', 'ImportOPML',
+    '/popular', 'PopularSites',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -55,7 +56,7 @@ class List:
         return render.storylist(page,
                                 self.get_thread_health(),
                                 low, high,
-                                feeddb)             
+                                feeddb, controller.in_appengine())
 
     def get_thread_health(self):
         wait = controller.get_queue_delay()
@@ -104,7 +105,14 @@ class Sites:
         sfeeds = feedlib.sort(feeddb.get_feeds(), lambda feed: feed.get_ratio())
         sfeeds.reverse()
         return render.sites(sfeeds, controller.in_appengine())
-        
+
+class PopularSites:
+    def GET(self):
+        nocache()
+
+        feeds = feeddb.get_popular_feeds()
+        return render.popular(feeds)
+    
 class Vote:
     def GET(self, vote, id):
         nocache()

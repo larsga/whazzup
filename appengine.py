@@ -10,15 +10,13 @@ import feedlib
 
 # STATUS
 
+#  - author and site ratios are dubious
+#  - editing of feeds must be turned off
+
 #  - add OPML export
 #  - test OPML import
 #    - first verify that feeds are not duplicated
-#  - author and site ratios are dubious
-#  - editing of feeds must be turned off
 #  - story list is a bit slow, perhaps?
-#  - clean up front page
-#  - better message if not logged in
-#  - better message if no posts
 #  - subscribing to already registered feeds
 #  - improve site list page
 #  - need to add purging of old posts -> set a limit per feed; 200?
@@ -212,7 +210,7 @@ class AppEngineController(feedlib.Controller):
 
             post.title = item.get_title()
             post.author = item.get_author()
-            post.content = db.Text(item.get_description(), encoding = 'utf-8')
+            post.content = db.Text(item.get_description())
             post.pubdate = feedlib.parse_date(item.get_pubdate())
             post.put()
 
@@ -394,6 +392,12 @@ class GAEFeedDatabase(feedlib.Database):
                                feed._feed, user):
             sub.delete()
 
+    def get_popular_feeds(self):
+        return [FeedWrapper(feed) for feed in
+                db.GqlQuery("""select * from GAEFeed
+                            order by subscribers desc
+                            limit 50""")]
+
     def _get_word_db(self):
         if not self._worddb:
             self._worddb = AppEngineWordDatabase()
@@ -464,6 +468,9 @@ class FeedWrapper(feedlib.Feed):
             
     def is_being_read(self):
         return False
+
+    def is_subscribed(self):
+        return self._get_sub()
 
     def _get_sub(self):
         if not self._sub:

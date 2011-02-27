@@ -1,15 +1,25 @@
-$def with (page, thread_health, low, high, feeddb)
+$def with (page, thread_health, low, high, feeddb, appengine)
 
 <link rel=stylesheet type="text/css" href="static/style.css">
 
 <title>What's up</title>
 <h1>What's up</h1>
 
-<div class=health>$:thread_health<br>Items: $(feeddb.get_item_count())</div>
+$if not appengine:
+  <div class=health>$:thread_health<br>Items: $(feeddb.get_item_count())</div>
 
+$ items = feeddb.get_item_range(low, high)
+
+$if not items:
+    <p>You have no news. Probably this is because you haven't
+    subscribed to any feeds yet. Go to the <a href="/sites">feed list</a>
+    to subscribe to some feeds.
+$else:
+    <p>Wonderful.
+     
 <table>
 $ ix = low
-$for item in feeddb.get_item_range(low, high):
+$for item in items:
     <tr><td>$(ix + 1).
     <td><a href="/vote/up/$(item.get_local_id())"><img src=static/up.png></a>
     <td><a href="/faveform/$(item.get_local_id())"><img src=static/star.png></a>
@@ -28,20 +38,23 @@ $for item in feeddb.get_item_range(low, high):
 
 </table>
 
-<p>
-$if page:
-    <a href="/$(page - 1)">previous</a>
+$if items:
+    <p>
+    $if page:
+        <a href="/$(page - 1)">previous</a>
+    
+    $for ix in range((feeddb.get_item_count() / 25) + 1):
+        $if ix == page:
+            <b>$(ix + 1)</b>
+        $else:
+            <a href="/$ix">$(ix + 1)</a>
+    <a href="/$(page + 1)">next</a>
 
-$for ix in range((feeddb.get_item_count() / 25) + 1):
-    $if ix == page:
-        <b>$(ix + 1)</b>
-    $else:
-        <a href="/$ix">$(ix + 1)</a>
-<a href="/$(page + 1)">next</a>
-
-<p><a href="/reload">Reload</a> | 
-<a href="/sites">Sites</a> | 
-<a href="/shutdown">Shutdown</a> | 
-<!--a href="/faveform/">Add fave</a> | -->
-<a href="/recalc">Recalculate</a>
-<p>Up: $(feeddb.get_vote_stats()[0]), down: $(feeddb.get_vote_stats()[1])
+$if not appengine:
+  <p><a href="/reload">Reload</a> | 
+  <a href="/sites">Feeds</a> | 
+  <a href="/shutdown">Shutdown</a> | 
+  <a href="/recalc">Recalculate</a>
+  <p>Up: $(feeddb.get_vote_stats()[0]), down: $(feeddb.get_vote_stats()[1])
+$else:
+  <p><a href="/sites">Feeds</a>
