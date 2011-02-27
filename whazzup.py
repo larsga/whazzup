@@ -120,7 +120,13 @@ class Vote:
         link.record_vote(vote)
         if vote != "read":
             controller.recalculate_all_posts() # since scores have changed
-        web.seeother("/") # FIXME
+
+        referrer = web.ctx.env.get('HTTP_REFERER')
+        if referrer:
+            goto = referrer[referrer.rfind("/") : ]
+        else:
+            goto = "/"
+        web.seeother(goto)
 
 class ShowItem:
     def GET(self, id):

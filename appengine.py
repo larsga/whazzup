@@ -10,8 +10,10 @@ import feedlib
 
 # STATUS
 
+#  - first-time user causes a null user to be created FIXED?
 #  - author and site ratios are dubious
 #  - fix errors in tokenization
+#  - navigation menu at top
 
 #  - add OPML export
 #  - test OPML import
@@ -78,6 +80,7 @@ class AppEngineController(feedlib.Controller):
 
     def recalculate_subscription(self, key):
         sub = db.get(db.Key(key))
+        feeddb.set_user(sub.user) # no current user...
         result = db.GqlQuery("select * from GAEUser where user = :1", sub.user)
         if result.count() > 0:
             userobj = result[0]
@@ -312,6 +315,7 @@ class GAEFeedDatabase(feedlib.Database):
     def __init__(self):
         feedlib.Database.__init__(self)
         self._worddb = None
+        self._user = None
 
     def get_item_by_id(self, key):
         return PostWrapper(db.get(db.Key(key)))
@@ -398,9 +402,12 @@ class GAEFeedDatabase(feedlib.Database):
                             order by subscribers desc
                             limit 50""")]
 
+    def set_user(self, user):
+        self._user = user
+
     def _get_word_db(self):
         if not self._worddb:
-            self._worddb = AppEngineWordDatabase()
+            self._worddb = AppEngineWordDatabase(self._user)
         return self._worddb
 
     def _get_author_db(self):
@@ -553,24 +560,27 @@ class PostWrapper(feedlib.Post):
 
 class AppEngineWordDatabase(feedlib.WordDatabase):
 
-    def __init__(self):        
-        user = users.get_current_user()
+    def __init__(self, user = None):
+        user = user or users.get_current_user()
+        if not user:
+            logging.warn("No user in word database!")
         results = db.GqlQuery("select * from GAEUser where user = :1", user)
-        self._user = None
+        self._userdata = None
+        self._user = user
         self._changed = False
         worddb = {}
         
         if results.count() > 0:
-            self._user = results[0]
+            self._userdata = results[0]
             blob = results[0].worddb
             if blob:
                 worddb = marshal.loads(blob)
         else:
-            self._user = GAEUser()
-            self._user.user = users.get_current_user()
-            self._user.worddb = marshal.dumps({})
-            self._user.lastupdate = datetime.datetime.now()
-            self._user.put()
+            self._userdata = GAEUser()
+            self._userdata.user = users.get_current_user()
+            self._userdata.worddb = marshal.dumps({})
+            self._userdata.lastupdate = datetime.datetime.now()
+            self._userdata.put()
 
         feedlib.WordDatabase.__init__(self, worddb)
 
@@ -585,11 +595,11 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
     def close(self):
         if self._changed:
             if not self._user:
-                self._user = GAEUser()
-                self._user.user = users.get_current_user()
-            self._user.worddb = marshal.dumps(self._words)
-            self._user.lastupdate = datetime.datetime.now()
-            self._user.put()
+                self._userdata = GAEUser()
+                self._userdata.user = self._user
+            self._userdata.worddb = marshal.dumps(self._words)
+            self._userdata.lastupdate = datetime.datetime.now()
+            self._userdata.put()
         
     
 controller = AppEngineController()

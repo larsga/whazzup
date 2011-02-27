@@ -19,8 +19,11 @@ $for site in feeds:
     <tr>
     <td>
     $if not site.is_subscribed():
-        <a href="/subscribe-site/$id"><img src=static/star.png></a>
-    <td><a href="site/$id">$(site.get_title())</a>
+        <form method=post action="/addfeed">
+        <input type=hidden name=url value="$(site.get_url())">
+        <input type=image src="/static/star.png" border="0">
+         </form>    
+    <td><a href="$(site.get_link())">$(site.get_title())</a>
     <td>$(len(site.get_items()))
     <td>$(site.nice_time_since_last_read())
 </table>
