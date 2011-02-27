@@ -10,12 +10,10 @@ $if not appengine:
 
 $ items = feeddb.get_item_range(low, high)
 
-$if not items:
+$if not items and low == 0:
     <p>You have no news. Probably this is because you haven't
     subscribed to any feeds yet. Go to the <a href="/sites">feed list</a>
     to subscribe to some feeds.
-$else:
-    <p>Wonderful.
      
 <table>
 $ ix = low
@@ -48,13 +46,14 @@ $if items:
             <b>$(ix + 1)</b>
         $else:
             <a href="/$ix">$(ix + 1)</a>
-    <a href="/$(page + 1)">next</a>
+    $if len(items) == 25:
+        <a href="/$(page + 1)">next</a>
 
 $if not appengine:
-  <p><a href="/reload">Reload</a> | 
-  <a href="/sites">Feeds</a> | 
-  <a href="/shutdown">Shutdown</a> | 
-  <a href="/recalc">Recalculate</a>
-  <p>Up: $(feeddb.get_vote_stats()[0]), down: $(feeddb.get_vote_stats()[1])
+    <p><a href="/reload">Reload</a> | 
+    <a href="/sites">Feeds</a> | 
+    <a href="/shutdown">Shutdown</a> | 
+    <a href="/recalc">Recalculate</a>
+    <p>Up: $(feeddb.get_vote_stats()[0]), down: $(feeddb.get_vote_stats()[1])
 $else:
-  <p><a href="/sites">Feeds</a>
+    <p><a href="/sites">Feeds</a>

@@ -1,20 +1,25 @@
-$def with (feed)
+$def with (feed, appengine)
 
 <link rel=stylesheet type="text/css" href="/static/style.css">
 
 <title>Site: $(feed.get_title())</title>
 <h1>Site: $(feed.get_title())</h1>
 
-<form method=post action=/update-site/$(feed.get_local_id())>
 <table>
 <tr><th>Homepage <td>$(feed.get_link())
-<tr><th>Feed URL <td><input name=feedurl value="$(feed.get_url())" size=80>
-<tr><th>Time to wait <td><input name=time value=$(feed.get_time_to_wait())>
-
-<tr><td colspan=2><input type=submit value="Set">
+$if appengine:
+    <tr><th>Feed URL <td>$(feed.get_url())
+$else:
+    <form method=post action=/update-site/$(feed.get_local_id())>
+    <tr><th>Feed URL <td><input name=feedurl value="$(feed.get_url())" size=80>
+    <tr><th>Time to wait <td><input name=time value=$(feed.get_time_to_wait())>
+    
+    <tr><td colspan=2><input type=submit value="Set">
+    </form>
 </table>
-</form>
-        
+
+<p>&nbsp;</p>
+    
 <table>
 $ ix = 1
 $for item in feed.get_items():

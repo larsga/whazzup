@@ -11,7 +11,7 @@ import feedlib
 # STATUS
 
 #  - author and site ratios are dubious
-#  - editing of feeds must be turned off
+#  - fix errors in tokenization
 
 #  - add OPML export
 #  - test OPML import
@@ -538,6 +538,14 @@ class PostWrapper(feedlib.Post):
             self.recalculate()
         return self._points
 
+    def get_stored_points(self):
+        user = users.get_current_user()
+        results = db.GqlQuery("""select * from GAEPostRating
+                              where user = :1 and post = :2""",
+                              user, self._post)
+        if results.count() > 0:
+            return results[0].points
+
     def record_vote(self, vote):
         if vote != "read":
             self._parent.record_vote(vote)
@@ -557,6 +565,12 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
             blob = results[0].worddb
             if blob:
                 worddb = marshal.loads(blob)
+        else:
+            self._user = GAEUser()
+            self._user.user = users.get_current_user()
+            self._user.worddb = marshal.dumps({})
+            self._user.lastupdate = datetime.datetime.now()
+            self._user.put()
 
         feedlib.WordDatabase.__init__(self, worddb)
 
@@ -572,10 +586,11 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
         if self._changed:
             if not self._user:
                 self._user = GAEUser()
-                self._user.user = users.get_current_user()            
+                self._user.user = users.get_current_user()
             self._user.worddb = marshal.dumps(self._words)
             self._user.lastupdate = datetime.datetime.now()
             self._user.put()
+        
     
 controller = AppEngineController()
 feeddb = GAEFeedDatabase()

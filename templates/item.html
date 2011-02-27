@@ -1,4 +1,4 @@
-$def with (item, string, math, feeddb)
+$def with (item, string, math, feeddb, appengine)
 
 <link rel=stylesheet type="text/css" href="/static/style.css">
 
@@ -18,7 +18,9 @@ $if item.get_author():
 <tr><th>Age <td>$item.get_age()
 <tr><th>Age factor <td>$(math.log(math.log(item.get_age())))
 <tr><th>Points <td>$item.get_points()
-$if not item.is_seen():
+$if appengine:
+    <tr><th>Stored points <td>$item.get_stored_points()
+$if not item.is_seen() and not appengine:
     <tr><th>Position <td>$(feeddb.get_no_of_item(item))
 <tr><th>URL <td><a href="$item.get_link()">$item.get_link()</a>
 <tr><th>GUID <td>$item.get_guid()

@@ -70,7 +70,7 @@ class SiteReport:
         nocache()
 
         feed = feeddb.get_feed_by_id(id)
-        return render.sitereport(feed)
+        return render.sitereport(feed, controller.in_appengine())
             
 class UpdateSite:
     def POST(self, id):
@@ -127,7 +127,8 @@ class ShowItem:
         nocache()
         try:
             item = feeddb.get_item_by_id(id)
-            return render.item(item, string, math, feeddb)
+            return render.item(item, string, math, feeddb,
+                               controller.in_appengine())
         except KeyError, e:
             return "No such item: " + repr(id)
         
