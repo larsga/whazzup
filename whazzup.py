@@ -10,7 +10,7 @@ urls = (
     '/sites', 'Sites',
     '/site/(.+)', 'SiteReport',
     '/update-site/(\d+)', 'UpdateSite',
-    '/delete-site/(\d+)', 'DeleteSite',
+    '/delete-site/(.+)', 'DeleteSite',
     '/start-thread', 'StartThread',
     '/item/(.+)', 'ShowItem',
     '/reload', 'Reload',
@@ -91,12 +91,9 @@ class DeleteSite:
     def GET(self, id):
         nocache()
 
-        id = int(id)
         feed = feeddb.get_feed_by_id(id)
         feeddb.remove_feed(feed)
         feeddb.save()
-
-        # FIXME: should also remove posts from db!
         
         return "<p>Deleted.</p>"
         
@@ -106,7 +103,7 @@ class Sites:
         
         sfeeds = feedlib.sort(feeddb.get_feeds(), lambda feed: feed.get_ratio())
         sfeeds.reverse()
-        return render.sites(sfeeds)
+        return render.sites(sfeeds, controller.in_appengine())
         
 class Vote:
     def GET(self, vote, id):

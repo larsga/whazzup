@@ -10,13 +10,18 @@ import feedlib
 
 # STATUS
 
-#  - site ratio is misreported in site list
-#  - support for removing feeds
+#  - add OPML export
+#  - test OPML import
+#    - first verify that feeds are not duplicated
 #  - author and site ratios are dubious
-#  - does aging ratings really have any effect?
-#  - need to add purging of old posts
-#  - what about feeds which have no subscribers?
-#  - urlfetch is not returning Unicode, but only ascii -> site stats issue
+#  - editing of feeds must be turned off
+#  - story list is a bit slow, perhaps?
+#  - clean up front page
+#  - better message if not logged in
+#  - better message if no posts
+#  - subscribing to already registered feeds
+#  - improve site list page
+#  - need to add purging of old posts -> set a limit per feed; 200?
 
 def toseconds(timestamp):
     return time.mktime(timestamp.timetuple())    
@@ -60,6 +65,8 @@ class AppEngineController(feedlib.Controller):
         sub = GAESubscription()
         sub.user = user
         sub.feed = feed
+        sub.up = 0
+        sub.down = 0
         sub.put()
 
         if feed.subscribers > 1:
@@ -122,7 +129,7 @@ class AppEngineController(feedlib.Controller):
             rating.put()
 
     def recalculate_all_posts(self):
-        user = users.get_current_user() # FIXME: need user key here
+        user = users.get_current_user() # not a task, so it's OK
         for sub in db.GqlQuery("select __key__ from GAESubscription where user = :1", user):
             self.queue_recalculate_subscription(sub)
 
@@ -132,14 +139,16 @@ class AppEngineController(feedlib.Controller):
 
     def age_subscription(self, key):
         sub = db.get(db.Key(key))
-        for rating in db.GqlQuery("""select * from GAESubscription
+        for rating in db.GqlQuery("""select * from GAEPostRating
                                   where user = :1 and feed = :2""",
                                   sub.user, sub.feed):
+            date = None
             if hasattr(rating, "postdate"):
                 date = rating.postdate
-            else:
+            if not date:
                 date = rating.post.pubdate
             rating.points = feedlib.calculate_points(rating.points, date)
+            rating.postdate = date
             rating.put()
 
     def start_feed_reader(self):
@@ -203,7 +212,7 @@ class AppEngineController(feedlib.Controller):
 
             post.title = item.get_title()
             post.author = item.get_author()
-            post.content = item.get_description()
+            post.content = db.Text(item.get_description(), encoding = 'utf-8')
             post.pubdate = feedlib.parse_date(item.get_pubdate())
             post.put()
 
@@ -217,10 +226,13 @@ class AppEngineController(feedlib.Controller):
 
     def remove_dead_feeds(self):
         for feed in db.GqlQuery("select * from GAEFeed where subscribers = 0"):
-            for post in db.GqlQuery("select __key__ from GAEPost where "
+            for post in db.GqlQuery("select * from GAEPost where "
                                     "feed = :1", feed):
                 post.delete()
-            # delete the ratings, too?
+
+            # seenposts and ratings should have been deleted during unsubscribe
+            # already, so we don't do those here
+
             feed.delete()
 
     # methods to queue tasks
@@ -292,20 +304,7 @@ def gae_loader(parser, url):
     if result.status_code != 200:
         raise IOError("Error retrieving URL")
 
-    # charset = "iso-8859-1"
-    # if result.headers.has_key("content-type"):
-    #     ctype = result.headers["content-type"]
-    #     pos = ctype.find("charset=")
-    #     if pos == -1:
-    #         logging.warn("Content-type had no charset: " + repr(ctype))
-    #     else:
-    #         charset = ctype[pos + len("charset=") : ]
-
-    # try:
-    #     data = result.content.decode(charset)
-    # except LookupError:
-    #     data = result.content.decode("iso-8859-1")
-    data = result.content # FIXME: how to turn this into unicode?3
+    data = result.content
             
     parser.feed(data)
     parser.close()
@@ -370,13 +369,31 @@ class GAEFeedDatabase(feedlib.Database):
 
         seen = GAESeenPost()
         seen.user = user
-        seen.feed = post.feed # yuk
+        seen.feed = post.feed
         seen.post = post
         seen.put()
 
     def get_no_of_item(self, item):
         return 0 # FIXME: we can't compute this
-        
+    
+    def remove_feed(self, feed):
+        # this is really unsubscribe, not remove
+        user = users.get_current_user()
+        for rating in db.GqlQuery("""select * from GAEPostRating
+                                  where feed = :1 and user = :2""",
+                                  feed._feed, user):
+            rating.delete()
+
+        for seen in db.GqlQuery("""select * from GAESeenPost
+                                where feed = :1 and user = :2""",
+                                feed._feed, user):
+            seen.delete()
+
+        for sub in db.GqlQuery("""select * from GAESubscription
+                               where feed = :1 and user = :2""",
+                               feed._feed, user):
+            sub.delete()
+
     def _get_word_db(self):
         if not self._worddb:
             self._worddb = AppEngineWordDatabase()
@@ -388,7 +405,7 @@ class GAEFeedDatabase(feedlib.Database):
     def _get_site_db(self):
         return self._get_word_db()
     
-class FeedWrapper:
+class FeedWrapper(feedlib.Feed):
 
     def __init__(self, obj):
         if isinstance(obj, GAESubscription):
@@ -437,6 +454,14 @@ class FeedWrapper:
             return time.time() - toseconds(self._feed.lastcheck)
         return 0
 
+    def record_vote(self, vote):
+        sub = self._get_sub()
+        if vote == "up":
+            self._sub.up = (self._sub.up or 0) + 1
+        elif vote == "down":
+            self._sub.down = (self._sub.down or 0) + 1
+        self._sub.put()
+            
     def is_being_read(self):
         return False
 
@@ -482,7 +507,12 @@ class PostWrapper(feedlib.Post):
         return self._parent
 
     def get_description(self):
-        return self._post.content
+        # content is a db.Text object, which web.py doesn't recognize as being
+        # a unicode string, even though that's what it is. so we need to turn
+        # it into a normal unicode string.
+        str = self._post.content.encode("utf-8") # make a byte string
+        str = str.decode("utf-8") # reinterpret as unicode string
+        return str
 
     def get_date(self):
         return self._post.pubdate
@@ -491,7 +521,7 @@ class PostWrapper(feedlib.Post):
         return str(self._post.pubdate)
 
     def get_age(self):
-        age = time.time() - self._post.pubdate.toordinal()
+        age = time.time() - toseconds(self._post.pubdate)
         if age < 0:
             age = 3600
         return age
@@ -500,6 +530,11 @@ class PostWrapper(feedlib.Post):
         if not hasattr(self, "_points"):
             self.recalculate()
         return self._points
+
+    def record_vote(self, vote):
+        if vote != "read":
+            self._parent.record_vote(vote)
+        feedlib.Post.record_vote(self, vote)
 
 class AppEngineWordDatabase(feedlib.WordDatabase):
 

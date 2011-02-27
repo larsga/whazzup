@@ -120,6 +120,23 @@ class Database:
 
     def _get_site_db(self):
         raise NotImplementedError()
+
+class Feed:
+
+    def time_since_last_read(self):
+        raise NotImplementedError()
+    
+    # shared code
+
+    def nice_time_since_last_read(self):
+        secs = int(self.time_since_last_read())
+        if secs > 86400:
+            return "%s days" % (secs / 86400)
+        if secs > 3600:
+            return "%s hours" % (secs / 3600)
+        if secs > 60:
+            return "%s minutes" % (secs / 60)
+        return "%s seconds" % secs
     
 class Post:
     
