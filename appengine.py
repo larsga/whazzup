@@ -10,6 +10,13 @@ import feedlib
 
 # STATUS
 
+#  - way too much CPU usage, especially in age_subscription.
+#    should we index subscriptions to solve this?
+#  - /sites is so heavy because it gives the number of posts per feed.
+#    if we are to report this we need to store it on the site.
+#  - /popular has the same problem
+
+
 #  - first-time user causes a null user to be created FIXED?
 #  - author and site ratios are dubious
 #  - fix errors in tokenization
@@ -79,6 +86,7 @@ class AppEngineController(feedlib.Controller):
             self.queue_check_feed(feed)
 
     def recalculate_subscription(self, key):
+        logging.info("Starting recalculation for " + str(key))
         sub = db.get(db.Key(key))
         feeddb.set_user(sub.user) # no current user...
         result = db.GqlQuery("select * from GAEUser where user = :1", sub.user)
@@ -89,18 +97,19 @@ class AppEngineController(feedlib.Controller):
             lastupdate = datetime.datetime.now()
 
         # get all seen posts for this subscription
-        ratings = {} # post.key -> (rating | seen)
-        for seen in db.GqlQuery("""
+        seen = {} # post.key -> seen
+        for s in db.GqlQuery("""
           select * from GAESeenPost where feed = :1 and user = :2""",
                                 sub.feed, sub.user):
-            ratings[seen.post.key()] = seen
-            
+            seen[s.post.key()] = s
+
         # get all existing ratings for this subscription
+        ratings = {} # post.key -> rating
         for rating in db.GqlQuery("""
           select * from GAEPostRating where feed = :1 and user = :2""",
                                   sub.feed, sub.user):
             key = rating.post.key()
-            if ratings.has_key(key):
+            if seen.has_key(key):
                 rating.delete() # means we've already seen this post
             else:
                 ratings[key] = rating
@@ -108,19 +117,26 @@ class AppEngineController(feedlib.Controller):
         thefeed = FeedWrapper(sub)
         
         # evaluate each post to see what to do
-        for post in db.GqlQuery("""
-          select * from GAEPost where feed = :1""", sub.feed):
-            rating = ratings.get(post.key())
+        count = 0
+        total = 0
+        for key in db.GqlQuery("""
+          select __key__ from GAEPost where feed = :1""", sub.feed):
+            total += 1
+
+            if seen.has_key(key):
+                continue # we've seen this post before, so move on
+
+            rating = ratings.get(key)
+            if rating and rating.calculated > lastupdate:
+                continue # this rating is up to date, so ignore it
+
+            post = db.get(key)
             if not rating:
                 rating = GAEPostRating()
                 rating.post = post
                 rating.user = sub.user
                 rating.feed = post.feed
                 rating.postdate = post.pubdate
-            elif isinstance(rating, GAESeenPost):
-                continue # we've seen this post before, so move on
-            elif rating.calculated > lastupdate:
-                continue # this rating is up to date, so ignore it
 
             thepost = PostWrapper(post, thefeed)
             thepost.recalculate()
@@ -128,6 +144,10 @@ class AppEngineController(feedlib.Controller):
             rating.points = thepost.get_points()
             rating.calculated = datetime.datetime.now()
             rating.put()
+            count += 1
+
+        logging.info("Recalculated %s posts (of %s) for key %s" %
+                     (count, total, key))
 
     def recalculate_all_posts(self):
         user = users.get_current_user() # not a task, so it's OK
@@ -139,18 +159,23 @@ class AppEngineController(feedlib.Controller):
             self.queue_age_subscription(sub)
 
     def age_subscription(self, key):
+        logging.info("Starting to age posts for key " + str(key))
         sub = db.get(db.Key(key))
+        count = 0
+        really = 0
         for rating in db.GqlQuery("""select * from GAEPostRating
                                   where user = :1 and feed = :2""",
                                   sub.user, sub.feed):
-            date = None
-            if hasattr(rating, "postdate"):
-                date = rating.postdate
-            if not date:
-                date = rating.post.pubdate
-            rating.points = feedlib.calculate_points(rating.points, date)
-            rating.postdate = date
-            rating.put()
+            oldpoints = rating.points
+            newpoints = feedlib.calculate_points(rating.prob, rating.postdate)
+            count += 1
+            if abs(oldpoints - newpoints) > 0.5:
+                really += 1
+                rating.points = newpoints
+                rating.put()
+            
+        logging.info("Aged %s posts (really %s) for key %s" %
+                     (count, really, key))
 
     def start_feed_reader(self):
         pass

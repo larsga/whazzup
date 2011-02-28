@@ -455,6 +455,11 @@ def get_feeds():
             return wzfactory.make_feed_registry()
         raise e
 
+class WordDatabase(feedlib.WordDatabase):
+
+    def __init__(self, filename):
+        feedlib.WordDatabase.__init__(self, dbm.open(filename, 'c'))
+    
 # ----- QUEUES
 
 # ISSUES TO FIX:
