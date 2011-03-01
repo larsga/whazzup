@@ -10,17 +10,17 @@ import feedlib
 
 # STATUS
 
+#  - need to add purging of old posts according to maxposts
+
 #  - way too much CPU usage, especially in age_subscription.
 #    should we index subscriptions to solve this?
 #  - /sites is so heavy because it gives the number of posts per feed.
 #    if we are to report this we need to store it on the site.
 #  - /popular has the same problem
 
-
 #  - first-time user causes a null user to be created FIXED?
 #  - author and site ratios are dubious
 #  - fix errors in tokenization
-#  - navigation menu at top
 
 #  - add OPML export
 #  - test OPML import
@@ -28,10 +28,6 @@ import feedlib
 #  - story list is a bit slow, perhaps?
 #  - subscribing to already registered feeds
 #  - improve site list page
-#  - need to add purging of old posts -> set a limit per feed; 200?
-
-def toseconds(timestamp):
-    return time.mktime(timestamp.timetuple())    
 
 def get_object(query, *params):
     params = [query] + list(params)
@@ -86,7 +82,6 @@ class AppEngineController(feedlib.Controller):
             self.queue_check_feed(feed)
 
     def recalculate_subscription(self, key):
-        logging.info("Starting recalculation for " + str(key))
         sub = db.get(db.Key(key))
         feeddb.set_user(sub.user) # no current user...
         result = db.GqlQuery("select * from GAEUser where user = :1", sub.user)
@@ -119,6 +114,7 @@ class AppEngineController(feedlib.Controller):
         # evaluate each post to see what to do
         count = 0
         total = 0
+        stored = 0
         for key in db.GqlQuery("""
           select __key__ from GAEPost where feed = :1""", sub.feed):
             total += 1
@@ -137,17 +133,25 @@ class AppEngineController(feedlib.Controller):
                 rating.user = sub.user
                 rating.feed = post.feed
                 rating.postdate = post.pubdate
+                oldpoints = 0
+                newrating = True
+            else:
+                oldpoints = rating.points
+                newrating = False
 
             thepost = PostWrapper(post, thefeed)
             thepost.recalculate()
-            rating.prob = thepost.get_overall_probability()
-            rating.points = thepost.get_points()
-            rating.calculated = datetime.datetime.now()
-            rating.put()
+            newpoints = thepost.get_points()
+            if newrating or abs(oldpoints - newpoints) > 0.5:
+                rating.prob = thepost.get_overall_probability()
+                rating.calculated = datetime.datetime.now()
+                rating.points = thepost.get_points()
+                rating.put()
+                stored += 1
             count += 1
 
-        logging.info("Recalculated %s posts (of %s) for key %s" %
-                     (count, total, key))
+        logging.info("Recalculated %s posts (of %s; %s stored) for key %s" %
+                     (count, total, stored, key))
 
     def recalculate_all_posts(self):
         user = users.get_current_user() # not a task, so it's OK
@@ -159,7 +163,6 @@ class AppEngineController(feedlib.Controller):
             self.queue_age_subscription(sub)
 
     def age_subscription(self, key):
-        logging.info("Starting to age posts for key " + str(key))
         sub = db.get(db.Key(key))
         count = 0
         really = 0
@@ -216,6 +219,14 @@ class AppEngineController(feedlib.Controller):
         feed.lastcheck = datetime.datetime.now()
         feed.error = None
         feed.lasterror = None
+        feed.maxposts = 300
+        if site.get_items():
+            oldest = site.get_items()[-1]
+            dt = feedlib.parse_date(oldest.get_pubdate())
+            delta = time.time() - feedlib.toseconds(dt)
+            count = len(site.get_items())
+            feed.maxposts = int(max(min((count / (delta / 3600)) * 24 * 7 * 8, 300), 30))
+        
         feed.put()
 
         post_map = {}
@@ -296,6 +307,7 @@ class GAEFeed(db.Model):
     error = db.StringProperty()
     lasterror = db.DateTimeProperty()
     subscribers = db.IntegerProperty() # when this goes to 0...
+    maxposts = db.IntegerProperty()
 
 class GAESubscription(db.Model):
     user = db.UserProperty()
@@ -452,6 +464,10 @@ class FeedWrapper(feedlib.Feed):
             self._sub = None
             # better not try to touch self._sub here...
 
+    def get_item_count(self):
+        "On GAE this returns max number of postings, not actual number"
+        return self._feed.maxposts
+            
     def get_url(self):
         return self._feed.xmlurl
             
@@ -487,7 +503,7 @@ class FeedWrapper(feedlib.Feed):
     def time_since_last_read(self):
         "Seconds since last read."
         if self._feed.lastcheck:
-            return time.time() - toseconds(self._feed.lastcheck)
+            return time.time() - feedlib.toseconds(self._feed.lastcheck)
         return 0
 
     def record_vote(self, vote):
@@ -560,7 +576,7 @@ class PostWrapper(feedlib.Post):
         return str(self._post.pubdate)
 
     def get_age(self):
-        age = time.time() - toseconds(self._post.pubdate)
+        age = time.time() - feedlib.toseconds(self._post.pubdate)
         if age < 0:
             age = 3600
         return age

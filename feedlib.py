@@ -65,8 +65,11 @@ def parse_date(datestring):
 
     return datetime.utcnow()
 
+def toseconds(timestamp):
+    return time.mktime(timestamp.timetuple())
+
 def calculate_points(prob, postdate):
-    age = time.time() - postdate.toordinal()
+    age = time.time() - toseconds(postdate)
     if age < 0:
         age = 3600
     return (prob * 1000.0) / math.log(age)
@@ -133,7 +136,10 @@ class Feed:
         if secs > 86400:
             return "%s days" % (secs / 86400)
         if secs > 3600:
-            return "%s hours" % (secs / 3600)
+            if secs < (3600 * 3):
+                return "%s hours %s mins" % (secs / 3600, (secs % 3600) / 60)
+            else:
+                return "%s hours" % (secs / 3600)
         if secs > 60:
             return "%s minutes" % (secs / 60)
         return "%s seconds" % secs

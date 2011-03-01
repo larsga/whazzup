@@ -16,3 +16,7 @@ tr.error, tr.error a {
 th {
     text-align: left;
 }
+
+div.topmenu {
+    float: right;
+}

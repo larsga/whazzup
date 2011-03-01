@@ -3,6 +3,11 @@ $def with (feeds)
 <link rel=stylesheet type="text/css" href="static/style.css">
 
 <title>What's up - Popular feeds</title>
+<div class="topmenu">
+  <a href="/">Home</a> |
+  <a href="/sites">Feeds</a> |
+  Popular
+</div>
 <h1>Popular feeds</h1>
 
 <p>These are feeds with the most subscribers in the system. Click
@@ -11,7 +16,7 @@ the plus button to subscribe to one of them.</p>
 <table>
 <tr><th>Add
     <th>Feed
-    <th>Posts
+    <th>Max posts
     <th>Last checked
       
 $for site in feeds:
@@ -24,6 +29,6 @@ $for site in feeds:
         <input type=image src="/static/star.png" border="0">
          </form>    
     <td><a href="$(site.get_link())">$(site.get_title())</a>
-    <td>$(len(site.get_items()))
+    <td>$(site.get_item_count())
     <td>$(site.nice_time_since_last_read())
 </table>
