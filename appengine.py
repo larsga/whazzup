@@ -10,17 +10,16 @@ import feedlib
 
 # STATUS
 
-#  - need to add purging of old posts according to maxposts
-
-#  - way too much CPU usage, especially in age_subscription.
-#    should we index subscriptions to solve this?
-#  - /sites is so heavy because it gives the number of posts per feed.
-#    if we are to report this we need to store it on the site.
-#  - /popular has the same problem
-
-#  - first-time user causes a null user to be created FIXED?
 #  - author and site ratios are dubious
 #  - fix errors in tokenization
+#  - need to add purging of old posts according to maxposts
+
+#  - why are there so many calls to age_subscription?
+#  - way too much CPU usage, especially in recalc_sub.
+#  - first-time user causes a null user to be created FIXED?
+
+#  - fix redirect from list of items on feed page
+#  - hide buttons for items which are read on feed page
 
 #  - add OPML export
 #  - test OPML import
@@ -114,7 +113,7 @@ class AppEngineController(feedlib.Controller):
         # evaluate each post to see what to do
         count = 0
         total = 0
-        stored = 0
+        toupdate = []
         for key in db.GqlQuery("""
           select __key__ from GAEPost where feed = :1""", sub.feed):
             total += 1
@@ -146,12 +145,13 @@ class AppEngineController(feedlib.Controller):
                 rating.prob = thepost.get_overall_probability()
                 rating.calculated = datetime.datetime.now()
                 rating.points = thepost.get_points()
-                rating.put()
-                stored += 1
+                toupdate.append(rating)
             count += 1
 
+        if toupdate:
+            db.put(toupdate)
         logging.info("Recalculated %s posts (of %s; %s stored) for key %s" %
-                     (count, total, stored, key))
+                     (count, total, len(toupdate), key))
 
     def recalculate_all_posts(self):
         user = users.get_current_user() # not a task, so it's OK
@@ -165,7 +165,7 @@ class AppEngineController(feedlib.Controller):
     def age_subscription(self, key):
         sub = db.get(db.Key(key))
         count = 0
-        really = 0
+        toupdate = []
         for rating in db.GqlQuery("""select * from GAEPostRating
                                   where user = :1 and feed = :2""",
                                   sub.user, sub.feed):
@@ -173,12 +173,13 @@ class AppEngineController(feedlib.Controller):
             newpoints = feedlib.calculate_points(rating.prob, rating.postdate)
             count += 1
             if abs(oldpoints - newpoints) > 0.5:
-                really += 1
                 rating.points = newpoints
-                rating.put()
-            
+                toupdate.append(rating)
+
+        if toupdate:
+            db.put(toupdate) # batch put is faster
         logging.info("Aged %s posts (really %s) for key %s" %
-                     (count, really, key))
+                     (count, len(toupdate), key))
 
     def start_feed_reader(self):
         pass
@@ -188,6 +189,7 @@ class AppEngineController(feedlib.Controller):
         delta = datetime.timedelta(seconds = feedlib.TIME_TO_WAIT)
         checktime = now - delta
 
+        # FIXME: we can easily get rid of this query, thus saving cputime
         result = db.GqlQuery("""
          select __key__ from GAEFeed where lastcheck = NULL""")
 
@@ -272,7 +274,33 @@ class AppEngineController(feedlib.Controller):
 
             feed.delete()
 
+    def purge_posts(self):
+        for key in db.GqlQuery("select __key__ from GAEFeed"):
+            self.queue_purge_feed(key)
+
+    def purge_feed(self, key):
+        feed = db.get(db.Key(key))
+        todelete = []
+        count = 0
+        for key in db.GqlQuery("""select __key__ from GAEPost where feed = :1
+                                  order by pubdate desc""", feed):
+            if count > feed.maxposts:
+                todelete.append(key)
+                count += 1
+                for rkey in db.GqlQuery("""select __key__ from GAEPostRating
+                                        where post = :1""", key):
+                    todelete.append(rkey)
+                for skey in db.GqlQuery("""select __key__ from GAESeenPost
+                                        where post = :1""", key):
+                    todelete.append(skey)
+
+        db.delete(todelete)
+        logging.info("Deleted %s posts from %s" % (count, feed.title))
+        
     # methods to queue tasks
+
+    def queue_purge_feed(self, key):
+        taskqueue.add(url = "/task/purge-feed/" + str(key))
 
     def queue_age_subscription(self, key):
         taskqueue.add(url = "/task/age-subscription/" + str(key))
@@ -491,9 +519,7 @@ class FeedWrapper(feedlib.Feed):
 
     def get_items(self):
         result = db.GqlQuery("""
-          select *
-          from GAEPost
-          where feed = :1
+          select * from GAEPost where feed = :1 order by pubdate desc
         """, self._feed)
         return [PostWrapper(post, self) for post in result]
 

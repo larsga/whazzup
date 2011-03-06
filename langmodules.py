@@ -1,8 +1,5 @@
 # -*- coding: iso-8859-1 -*-
-"""Modules containing language-specific logic.
-
-$Id: langmodules.py,v 1.7 2008/12/04 12:29:34 lars.garshol Exp $
-"""
+"""Modules containing language-specific logic."""
 
 import string, codecs, os
 

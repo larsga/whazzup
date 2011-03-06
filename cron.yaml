@@ -5,3 +5,5 @@ cron:
   schedule: every 24 hours
 - url: /task/age-posts/
   schedule: every 1 hours
+- url: /task/purge-posts/
+  schedule: every 24 hours
