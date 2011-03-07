@@ -10,9 +10,7 @@ import feedlib
 
 # STATUS
 
-#  - author and site ratios are dubious
 #  - fix errors in tokenization
-#  - need to add purging of old posts according to maxposts
 
 #  - why are there so many calls to age_subscription?
 #  - way too much CPU usage, especially in recalc_sub.
@@ -233,10 +231,7 @@ class AppEngineController(feedlib.Controller):
 
         post_map = {}
         current_posts = db.GqlQuery("""
-          select *
-          from GAEPost
-          where feed = :1
-        """, feed)
+          select * from GAEPost where feed = :1""", feed)
         for post in current_posts:
             post_map[str(post.url)] = post
 
@@ -421,7 +416,7 @@ class GAEFeedDatabase(feedlib.Database):
         return worddb.get_word_ratio(word)
 
     def get_author_ratio(self, word):
-        return 0.5 # FIXME
+        return self.get_word_ratio(word) # should perhaps prefix, but...
 
     def remove_item(self, item):
         pass # I think we don't need this one

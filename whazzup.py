@@ -125,7 +125,10 @@ class Vote:
 
         referrer = web.ctx.env.get('HTTP_REFERER')
         if referrer:
-            goto = referrer[referrer.rfind("/") : ]
+            if referrer.find("/site/") == -1:
+                goto = referrer[referrer.rfind("/") : ]
+            else:
+                goto = referrer
         else:
             goto = "/"
         web.seeother(goto)
