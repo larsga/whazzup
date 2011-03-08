@@ -89,16 +89,13 @@ class EnglishModule(LanguageModule):
         self._stemmer = porter.PorterStemmer()
 
     def get_stem(self, word):
-        stem = self._stemmer.stem(string.lower(word))
-        # stemming foo's gives "foo'". need to remove the '
-        if stem[-1] == "'":
-            return stem[ : -1]
-        else:
-            return stem
+        if word.endswith("'s") or word.endswith(u"\u2019s"):
+            word = word[ : -2]
+        return self._stemmer.stem(string.lower(word))
 
     def clean_term(self, word):
-        if word[-2 : ] == "'s":
-            return word[ : -2]
+        if word.endswith("'s") or word.endswith(u"\u2019s"):
+            word = word[ : -2]
         return word
 
     def _load_stop_words(self):
