@@ -3,6 +3,8 @@
 import sys, string, math, operator, re, os, urllib
 import gazette        
 
+# &#8217;
+
 # Blacklist approach
 # Metadata extraction
 

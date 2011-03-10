@@ -320,7 +320,7 @@ except ImportError:
     # not in appengine
     import diskimpl
     module = diskimpl
-    
+
 controller = module.controller
 feeddb = module.feeddb
 
