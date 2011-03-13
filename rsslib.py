@@ -464,7 +464,7 @@ class AtomHandler(SAXTracker):
         elif name == "subtitle" and parent == "feed":
             self._site.set_description(self._contents)
         elif name == "id":
-            if parent == "feed":
+            if parent == "feed" and self._obj.get_link() == None:
                 self._obj.set_link(self._contents)
             elif parent == "entry":
                 self._obj.set_guid(self._contents)

@@ -10,7 +10,9 @@ import feedlib
 
 # STATUS
 
-#  - fix errors in tokenization
+#  - if a feed fails, we queue new check-feed tasks anyway
+#    - this causes the queue to fill up with check-feed tasks
+#    - need to stop this somehow
 
 #  - why are there so many calls to age_subscription?
 #  - way too much CPU usage, especially in recalc_sub.
@@ -277,11 +279,13 @@ class AppEngineController(feedlib.Controller):
         feed = db.get(db.Key(key))
         todelete = []
         count = 0
+        postsgone = 0
         for key in db.GqlQuery("""select __key__ from GAEPost where feed = :1
                                   order by pubdate desc""", feed):
+            count += 1
             if count > feed.maxposts:
                 todelete.append(key)
-                count += 1
+                postsgone += 1
                 for rkey in db.GqlQuery("""select __key__ from GAEPostRating
                                         where post = :1""", key):
                     todelete.append(rkey)
@@ -290,7 +294,7 @@ class AppEngineController(feedlib.Controller):
                     todelete.append(skey)
 
         db.delete(todelete)
-        logging.info("Deleted %s posts from %s" % (count, feed.title))
+        logging.info("Deleted %s posts from %s" % (postsgone, feed.title))
         
     # methods to queue tasks
 
@@ -618,7 +622,7 @@ class PostWrapper(feedlib.Post):
     def record_vote(self, vote):
         if vote != "read":
             self._parent.record_vote(vote)
-        feedlib.Post.record_vote(self, vote)
+        feedlib.Post.record_vote(self, vote) # link gets marked as seen here
 
 class AppEngineWordDatabase(feedlib.WordDatabase):
 
