@@ -71,6 +71,10 @@ class SiteReport:
     def GET(self, id):
         nocache()
 
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         feed = feeddb.get_feed_by_id(id)
         return render.sitereport(feed, controller.in_appengine())
             
@@ -94,6 +98,10 @@ class DeleteSite:
     def GET(self, id):
         nocache()
 
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         feed = feeddb.get_feed_by_id(id)
         feeddb.remove_feed(feed)
         feeddb.save()
@@ -103,6 +111,10 @@ class DeleteSite:
 class Sites:
     def GET(self):
         nocache()
+
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
         
         sfeeds = feedlib.sort(feeddb.get_feeds(), lambda feed: feed.get_ratio())
         sfeeds.reverse()
@@ -112,12 +124,21 @@ class PopularSites:
     def GET(self):
         nocache()
 
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         feeds = feeddb.get_popular_feeds()
         return render.popular(feeds)
     
 class Vote:
     def GET(self, vote, id):
         nocache()
+
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         link = feeddb.get_item_by_id(id)
         link.record_vote(vote)
         if vote != "read":
@@ -136,6 +157,10 @@ class Vote:
 class ShowItem:
     def GET(self, id):
         nocache()
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+
         try:
             item = feeddb.get_item_by_id(id)
             return render.item(item, string, math, feeddb,
@@ -153,6 +178,10 @@ class ImportOPML:
     def POST(self):
         nocache()
 
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         thefile = web.input()["opml"]
         inf = StringIO.StringIO(thefile)
         feeds = rsslib.read_opml(inf)
@@ -165,9 +194,13 @@ class ImportOPML:
     
 class AddFeed:
     def POST(self):
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         url = string.strip(web.input().get("url"))
         controller.add_feed(url)
-        return  "<p>Feed added to queue for processing.</p>"
+        return "<p>Feed added to queue for processing.</p>"
 
 class AddFave:
     def POST(self):        

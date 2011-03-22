@@ -37,7 +37,8 @@ $for item in items:
     $(item.get_site().get_title())
     $if item.get_author():
         , $(item.get_author())
-    <a href="/item/$(item.get_local_id())" style="color: inherit">[*]</a>
+    <a href="/item/$(item.get_local_id())" style="color: inherit">[*]</a>,
+    $(item.nice_age())
 
     $ ix += 1
 

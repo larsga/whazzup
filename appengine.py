@@ -10,6 +10,13 @@ import feedlib
 
 # STATUS
 
+#  - kill subscriptions with null user
+#  - figure out how we get subscriptions with no user
+#  - kill users with no user
+#  - figure out how we get GAEUsers with no user
+#  - admin function to kill bad feeds
+#  - kill GAEFeed aglweXdoYXp6dXByDwsSB0dBRUZlZWQYr7sFDA id=89519
+
 #  - if a feed fails, we queue new check-feed tasks anyway
 #    - this causes the queue to fill up with check-feed tasks
 #    - need to stop this somehow

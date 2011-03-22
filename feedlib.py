@@ -8,7 +8,19 @@ START_VOTES = 5
 TIME_TO_WAIT = 3600 * 3 # 3 hours
 
 # --- Utilities
-        
+
+def nice_time(secs):
+    if secs > 86400:
+        return "%s days" % (secs / 86400)
+    if secs > 3600:
+        if secs < (3600 * 3):
+            return "%s hours %s mins" % (secs / 3600, (secs % 3600) / 60)
+        else:
+            return "%s hours" % (secs / 3600)
+    if secs > 60:
+        return "%s minutes" % (secs / 60)
+    return "%s seconds" % secs
+
 def html2text(str):
     str = string.replace(str, "&lt;", "<")
     str = string.replace(str, "&gt;", ">")
@@ -132,21 +144,18 @@ class Feed:
     # shared code
 
     def nice_time_since_last_read(self):
-        secs = int(self.time_since_last_read())
-        if secs > 86400:
-            return "%s days" % (secs / 86400)
-        if secs > 3600:
-            if secs < (3600 * 3):
-                return "%s hours %s mins" % (secs / 3600, (secs % 3600) / 60)
-            else:
-                return "%s hours" % (secs / 3600)
-        if secs > 60:
-            return "%s minutes" % (secs / 60)
-        return "%s seconds" % secs
+        return nice_time(int(self.time_since_last_read()))
     
 class Post:
+
+    def get_age(self):
+        "Returns age of post in seconds."
+        raise NotImplementedError()
     
     # shared code
+
+    def nice_age(self):
+        return nice_time(int(self.get_age()))
 
     def get_word_probability(self):
         probs = []
