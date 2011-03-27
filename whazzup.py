@@ -34,6 +34,7 @@ urls = (
 
     # data fix tasks
     '/task/purge-bad-users/', 'PurgeBadUsers',
+    '/task/delete-user/(.+)', 'DeleteUser',
     )
 
 def nocache():
@@ -346,6 +347,14 @@ class PurgeBadUsers:
 
     def POST(self):
         controller.purge_bad_users()
+
+class DeleteUser:
+
+    def GET(self, key):
+        controller.delete_user(key)
+
+    def POST(self, key):
+        controller.delete_user(key)
         
 web.webapi.internalerror = web.debugerror
 

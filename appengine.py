@@ -304,6 +304,16 @@ class AppEngineController(feedlib.Controller):
         db.delete([key for key in db.GqlQuery("""select __key__ from GAEPostRating
                                               where user = NULL""")])
 
+    def delete_user(self, key):
+        user = db.get(db.Key(key))
+        for sub in db.GqlQuery("select * from GAESubscription where user = :1",
+                               user):
+            logging.info("Removing subscription to " + sub.feed.title)
+            feeddb.remove_feed(FeedWrapper(sub.feed), user)
+
+        logging.info("Removing user")
+        user.delete()
+
     # methods to queue tasks
 
     def queue_purge_feed(self, key):
@@ -452,9 +462,9 @@ class GAEFeedDatabase(feedlib.Database):
     def get_no_of_item(self, item):
         return 0 # FIXME: we can't compute this
     
-    def remove_feed(self, feed):
+    def remove_feed(self, feed, user = None):
         # this is really unsubscribe, not remove
-        user = users.get_current_user()
+        user = user or users.get_current_user()
         for rating in db.GqlQuery("""select * from GAEPostRating
                                   where feed = :1 and user = :2""",
                                   feed._feed, user):
@@ -657,12 +667,6 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
             blob = results[0].worddb
             if blob:
                 worddb = marshal.loads(blob)
-        else:
-            self._userdata = GAEUser()
-            self._userdata.user = users.get_current_user()
-            self._userdata.worddb = marshal.dumps({})
-            self._userdata.lastupdate = datetime.datetime.now()
-            self._userdata.put()
 
         feedlib.WordDatabase.__init__(self, worddb)
 
@@ -676,7 +680,10 @@ class AppEngineWordDatabase(feedlib.WordDatabase):
         
     def close(self):
         if self._changed:
-            if not self._user:
+            if not self._userdata:
+                if not self._user:
+                    logging.warn("Tried to create GAEUser but have no user!")
+                    return
                 self._userdata = GAEUser()
                 self._userdata.user = self._user
             self._userdata.worddb = marshal.dumps(self._words)
