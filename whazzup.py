@@ -31,6 +31,9 @@ urls = (
     '/task/age-subscription/(.+)', 'AgeSubscription',
     '/task/purge-posts/', 'PurgePosts',
     '/task/purge-feed/(.+)', 'PurgeFeed',
+
+    # data fix tasks
+    '/task/purge-bad-users/', 'PurgeBadUsers',
     )
 
 def nocache():
@@ -335,6 +338,14 @@ class PurgeFeed:
 
     def POST(self, key):
         controller.purge_feed(key)
+
+class PurgeBadUsers:
+
+    def GET(self):
+        controller.purge_bad_users()
+
+    def POST(self):
+        controller.purge_bad_users()
         
 web.webapi.internalerror = web.debugerror
 

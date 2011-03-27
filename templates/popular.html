@@ -16,6 +16,7 @@ the plus button to subscribe to one of them.</p>
 <table>
 <tr><th>Add
     <th>Feed
+    <th>Subscribers
     <th>Max posts
     <th>Last checked
       
@@ -29,6 +30,7 @@ $for site in feeds:
         <input type=image src="/static/star.png" border="0">
          </form>    
     <td><a href="$(site.get_link())">$(site.get_title())</a>
+    <td>$(site.get_subscribers())
     <td>$(site.get_item_count())
     <td>$(site.nice_time_since_last_read())
 </table>

@@ -10,13 +10,6 @@ import feedlib
 
 # STATUS
 
-#  - kill subscriptions with null user
-#  - figure out how we get subscriptions with no user
-#  - kill users with no user
-#  - figure out how we get GAEUsers with no user
-#  - admin function to kill bad feeds
-#  - kill GAEFeed aglweXdoYXp6dXByDwsSB0dBRUZlZWQYr7sFDA id=89519
-
 #  - if a feed fails, we queue new check-feed tasks anyway
 #    - this causes the queue to fill up with check-feed tasks
 #    - need to stop this somehow
@@ -302,7 +295,15 @@ class AppEngineController(feedlib.Controller):
 
         db.delete(todelete)
         logging.info("Deleted %s posts from %s" % (postsgone, feed.title))
-        
+
+    def purge_bad_users(self):
+        db.delete([key for key in db.GqlQuery("""select __key__ from GAEUser
+                                              where user = NULL """)])
+        db.delete([key for key in db.GqlQuery("""select __key__ from GAESeenPost
+                                              where user = NULL""")])
+        db.delete([key for key in db.GqlQuery("""select __key__ from GAEPostRating
+                                              where user = NULL""")])
+
     # methods to queue tasks
 
     def queue_purge_feed(self, key):
@@ -402,8 +403,10 @@ class GAEFeedDatabase(feedlib.Database):
         return [PostWrapper(rating.post) for rating in result]
     
     def get_feed_by_id(self, key):
-        return FeedWrapper(db.get(db.Key(key)))
-    
+        if type(key) == type(""):
+            key = db.Key(key)
+        return FeedWrapper(db.get(key))
+
     def get_item_count(self):
         return 0
 
@@ -466,6 +469,9 @@ class GAEFeedDatabase(feedlib.Database):
                                where feed = :1 and user = :2""",
                                feed._feed, user):
             sub.delete()
+
+        feed._feed.subscribers -= 1
+        feed._feed.put()
 
     def get_popular_feeds(self):
         return [FeedWrapper(feed) for feed in
@@ -551,6 +557,9 @@ class FeedWrapper(feedlib.Feed):
 
     def is_subscribed(self):
         return self._get_sub()
+
+    def get_subscribers(self):
+        return self._feed.subscribers
 
     def _get_sub(self):
         if not self._sub:
