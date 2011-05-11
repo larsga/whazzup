@@ -410,12 +410,6 @@ class FeedDatabase(rsslib.FeedRegistry):
         self._sites = WordDatabase("sites.dbm")
         self._authors = WordDatabase("authors.dbm")
         self._lock = threading.Lock()
-        try:
-            self._faves = rsslib.read_rss("faves.rss", wzfactory)
-        except IOError:
-            self._faves = Feed("faves.rss")
-            self._faves.set_title("Recent reading")
-            self._faves.set_description("A feed of my favourite recent reads.")
 
     def init(self):
         new_posts = []
@@ -480,16 +474,10 @@ class FeedDatabase(rsslib.FeedRegistry):
         del self._feedurlmap[feed.get_url()]
 
     def get_faves(self):
-        return self._faves
+        raise NotImplementedError("This functionality will be removed")
     
     def add_fave(self, fave):
-        # FIXME: set a limit to the number of items in the feed
-        self._faves.add_item_to_front(fave)
-        outf = codecs.open("faves.rss", "w", "utf-8")
-        rsslib.write_rss(self._faves, outf)
-        outf.close()
-
-        os.system("scp faves.rss garshol.virtual.vps-host.net:/home/larsga/")
+        raise NotImplementedError("This functionality will be removed")
 
     def save(self):
         outf = open("feeds.txt", "w")
