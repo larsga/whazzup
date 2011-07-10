@@ -16,7 +16,6 @@ import feedlib
 
 #  - why are there so many calls to age_subscription?
 #  - way too much CPU usage, especially in recalc_sub.
-#  - first-time user causes a null user to be created FIXED?
 
 #  - fix redirect from list of items on feed page
 #  - hide buttons for items which are read on feed page
@@ -206,6 +205,12 @@ class AppEngineController(feedlib.Controller):
 
     def check_feed(self, key):
         feed = db.get(db.Key(key))
+        if not feed:
+            # this means the feed has been deleted, and so the task is no
+            # longer necessary. we should just return and let the task die.
+            logging.info("Tried to check non-existent feed with key " + key)
+            return 
+        
         try:
             site = rsslib.read_feed(feed.xmlurl, data_loader = gae_loader)
         except Exception, e:
@@ -371,8 +376,8 @@ class GAEPost(db.Model):
 class GAEPostRating(db.Model):
     user = db.UserProperty()             # not sure if this is necessary
     feed = db.ReferenceProperty(GAEFeed) # non-normalized
-    prob = db.FloatProperty() # means we can do faster time-based recalc
-    postdate = db.DateTimeProperty() # ditto
+    prob = db.FloatProperty()            # so we can do faster time-based recalc
+    postdate = db.DateTimeProperty()     # ditto
     points = db.FloatProperty()
     post = db.ReferenceProperty(GAEPost)
     calculated = db.DateTimeProperty()
