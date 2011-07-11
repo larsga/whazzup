@@ -1,0 +1,9 @@
+cron:
+- url: /task/find-feeds-to-check/
+  schedule: every 10 minutes
+- url: /task/remove-dead-feeds/
+  schedule: every 24 hours
+- url: /task/age-posts/
+  schedule: every 1 hours
+- url: /task/purge-posts/
+  schedule: every 24 hours

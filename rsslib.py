@@ -13,38 +13,11 @@ from xml.sax import saxutils, make_parser
 from xml.sax.handler import feature_namespaces, ContentHandler
 from saxtracker import SAXTracker
 
-try:
-    import pycurl, cStringIO
-except ImportError:
-    pycurl = None # we couldn't import it, but can still get by
-
 # ===== Globals =====
 
 version = "0.3"
 rss_version = "0.91"
 doctype_decl = '<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">'
-
-# ===== Utilities =====
-
-def pycurl_download(url):
-    c = pycurl.Curl()
-    c.setopt(pycurl.FOLLOWLOCATION, 1)
-    c.setopt(pycurl.MAXREDIRS, 5)
-    c.setopt(pycurl.CONNECTTIMEOUT, 30)
-    c.setopt(pycurl.TIMEOUT, 300)
-    c.setopt(pycurl.URL, url)
-    fp = cStringIO.StringIO()
-    c.setopt(pycurl.WRITEFUNCTION, fp.write)
-
-    c.perform() # actually download
-
-    if c.getinfo(pycurl.HTTP_CODE) != 200:
-        raise IOError("Download with error code: %s" %
-                      c.getinfo(pycurl.HTTP_CODE))
-    if c.errstr():
-        raise IOError("PyCurl error: %s" % c.errstr())
-    
-    return fp.getvalue()
 
 # ===== Data structure =====
 
@@ -299,19 +272,18 @@ class RSSHandler(SAXTracker):
         elif name == "image":
             self._obj = self._site # restore previous object
 
-def read_xml(url, handler):
+def urllib_loader(parser, url):
+    # this exists because it allows us to inject other mechanisms for
+    # downloading content, such as GAE urlfetch
+    parser.parse(url)
+            
+def read_xml(url, handler, data_loader = urllib_loader):
     p = make_parser()
     p.setContentHandler(handler)
     #p.setErrorHandler(saxutils.ErrorRaiser(2))
     p.setFeature(feature_namespaces, 0)
-
-    if pycurl and url.startswith("http://"):
-        data = pycurl_download(url)
-        p.feed(data)
-        p.close()
-    else:
-        p.parse(url)
-            
+    data_loader(p, url)
+    
 def read_rss(url, factory = DefaultFactory()):
     ss = factory.make_site(url)
     handler = RSSHandler(ss, factory)
@@ -492,7 +464,7 @@ class AtomHandler(SAXTracker):
         elif name == "subtitle" and parent == "feed":
             self._site.set_description(self._contents)
         elif name == "id":
-            if parent == "feed":
+            if parent == "feed" and self._obj.get_link() == None:
                 self._obj.set_link(self._contents)
             elif parent == "entry":
                 self._obj.set_guid(self._contents)
@@ -535,12 +507,12 @@ def read_atom(url, factory = DefaultFactory()):
 
 # ==== FEED-AGNOSTIC LOADING
 
-def read_feed(url, factory = DefaultFactory()):
+def read_feed(url, factory = DefaultFactory(), data_loader = urllib_loader):
     """Loads feed without knowing whether it's RSS or Atom by autodetecting
     the format."""
     ss = factory.make_site(url)
     handler = AutoDetectingHandler(ss, factory)
-    read_xml(url, handler)
+    read_xml(url, handler, data_loader)
     return ss
 
 class AutoDetectingHandler(ContentHandler):

@@ -1,24 +1,40 @@
-import time, string, math, rsslib, sys, feedlib, queuebased, StringIO
+
+import time, string, math, rsslib, sys, feedlib, StringIO
 from xml.sax import SAXException
-    
+
 import web
 
 urls = (
     '/(\d*)', 'List',
-    '/vote/(up|down|read|star)/(\d+)', 'Vote',
+    '/vote/(up|down|read|star)/(.+)', 'Vote',
     '/sites', 'Sites',
-    '/site/(\d+)', 'SiteReport',
+    '/site/(.+)', 'SiteReport',
     '/update-site/(\d+)', 'UpdateSite',
-    '/delete-site/(\d+)', 'DeleteSite',
+    '/delete-site/(.+)', 'DeleteSite',
     '/start-thread', 'StartThread',
-    '/item/(\d+)', 'ShowItem',
+    '/item/(.+)', 'ShowItem',
     '/reload', 'Reload',
     '/addfeed', 'AddFeed',
     '/addfave', 'AddFave',
     '/shutdown', 'Shutdown',
     '/faveform/(\d*)', 'FaveForm',
     '/recalc', 'Recalculate',
-    '/uploadopml', 'ImportOPML'
+    '/uploadopml', 'ImportOPML',
+    '/popular', 'PopularSites',
+
+    # app engine tasks
+    '/task/check-feed/(.+)', 'TaskCheckFeed',
+    '/task/find-feeds-to-check/', 'FindFeedsToCheck',
+    '/task/recalc-sub/(.+)', 'RecalculateSubscription',
+    '/task/remove-dead-feeds/', 'RemoveDeadFeeds',
+    '/task/age-posts/', 'AgePosts',
+    '/task/age-subscription/(.+)', 'AgeSubscription',
+    '/task/purge-posts/', 'PurgePosts',
+    '/task/purge-feed/(.+)', 'PurgeFeed',
+
+    # data fix tasks
+    '/task/purge-bad-users/', 'PurgeBadUsers',
+    '/task/delete-user/(.+)', 'DeleteUser',
     )
 
 def nocache():
@@ -37,16 +53,19 @@ class List:
         else:
             page = 0
 
-        low = min(page * 25, feeddb.get_item_count())
-        high = min(low + 25, feeddb.get_item_count())
-
-        return render.list(page,
-                           self.get_thread_health(),
-                           low, high,
-                           feeddb)             
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+            
+        low = page * 25
+        high = low + 25
+        return render.storylist(page,
+                                self.get_thread_health(),
+                                low, high,
+                                feeddb, controller.in_appengine())
 
     def get_thread_health(self):
-        wait = time.time() - queuebased.lasttick
+        wait = controller.get_queue_delay()
         if wait < 120:
             return "Thread is OK (%s)" % int(wait)
         else:
@@ -56,9 +75,12 @@ class SiteReport:
     def GET(self, id):
         nocache()
 
-        id = int(id)
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         feed = feeddb.get_feed_by_id(id)
-        return render.sitereport(feed)
+        return render.sitereport(feed, controller.in_appengine())
             
 class UpdateSite:
     def POST(self, id):
@@ -80,39 +102,73 @@ class DeleteSite:
     def GET(self, id):
         nocache()
 
-        id = int(id)
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         feed = feeddb.get_feed_by_id(id)
         feeddb.remove_feed(feed)
         feeddb.save()
-
-        # FIXME: should also remove posts from db!
         
         return "<p>Deleted.</p>"
         
 class Sites:
     def GET(self):
         nocache()
+
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
         
-        sfeeds = feedlib.sort(feeddb.get_feeds(), feedlib.Feed.get_ratio)
+        sfeeds = feedlib.sort(feeddb.get_feeds(), lambda feed: feed.get_ratio())
         sfeeds.reverse()
-        return render.sites(sfeeds)
+        return render.sites(sfeeds, controller.in_appengine())
+
+class PopularSites:
+    def GET(self):
+        nocache()
+
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
         
+        feeds = feeddb.get_popular_feeds()
+        return render.popular(feeds)
+    
 class Vote:
     def GET(self, vote, id):
         nocache()
-        link = feeddb.get_item_by_id(int(id))
-        ix = feeddb.get_no_of_item(link)
+
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
+        link = feeddb.get_item_by_id(id)
         link.record_vote(vote)
         if vote != "read":
-            queuebased.recalculate_all_posts() # since scores have changed
-        web.seeother("/%s" % (ix / 25))
+            controller.recalculate_all_posts() # since scores have changed
+
+        referrer = web.ctx.env.get('HTTP_REFERER')
+        if referrer:
+            if referrer.find("/site/") == -1:
+                goto = referrer[referrer.rfind("/") : ]
+            else:
+                goto = referrer
+        else:
+            goto = "/"
+        web.seeother(goto)
 
 class ShowItem:
     def GET(self, id):
         nocache()
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+
         try:
-            item = feeddb.get_item_by_id(int(id))
-            return render.item(item, string, math, feeddb)
+            item = feeddb.get_item_by_id(id)
+            return render.item(item, string, math, feeddb,
+                               controller.in_appengine())
         except KeyError, e:
             return "No such item: " + repr(id)
         
@@ -120,34 +176,35 @@ class Reload:
     def GET(self):
         nocache()
         print "<h1>Reloaded</h1>"
-        print "<pre>"
-        new_posts = feeddb.init() # does a reload
-        if new_posts:
-            queuebased.queue.put((0, queuebased.RecalculatePosts(new_posts)))
-        print "</pre>"
+        controller.reload()
 
 class ImportOPML:
     def POST(self):
         nocache()
 
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         thefile = web.input()["opml"]
         inf = StringIO.StringIO(thefile)
         feeds = rsslib.read_opml(inf)
         inf.close()
 
         for newfeed in feeds.get_feeds():
-            feed = feedlib.Feed(newfeed.get_url())
-            feeddb.add_feed(feed)
+            controller.add_feed(newfeed.get_url())
         
-        feeddb.save()
         return "<p>Imported.</p>"
     
 class AddFeed:
     def POST(self):
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+        
         url = string.strip(web.input().get("url"))
-        posts = feeddb.read_feed(url)
-        feeddb.save()
-        return  "<p>Feed added, %s posts loaded</p>" % len(posts)
+        controller.add_feed(url)
+        return "<p>Feed added to queue for processing.</p>"
 
 class AddFave:
     def POST(self):        
@@ -202,7 +259,7 @@ class FaveForm:
 class StartThread:
 
     def GET(self):
-        feedlib.start_feed_reader(feeddb)
+        controller.start_feed_reader(feeddb)
         print "<p>Thread started.</p>"
 
 class Recalculate:
@@ -217,9 +274,112 @@ class Shutdown:
     def GET(self):
         sys.exit()
 
-# web.webapi.internalerror = web.debugerror
+# --- App Engine tasks
 
-feeddb = feedlib.feeddb
+class TaskCheckFeed:
+
+    def GET(self, key):
+        controller.check_feed(key)
+
+    def POST(self, key):
+        controller.check_feed(key)
+
+class FindFeedsToCheck:
+
+    def GET(self):
+        controller.find_feeds_to_check()
+
+    def POST(self):
+        controller.find_feeds_to_check()
+
+class RecalculateSubscription: # ie: user x feed
+
+    def GET(self, key):
+        controller.recalculate_subscription(key)
+
+    def POST(self, key):
+        controller.recalculate_subscription(key)
+
+class RemoveDeadFeeds:
+
+    def GET(self):
+        controller.remove_dead_feeds()
+
+    def POST(self):
+        controller.remove_dead_feeds()
+
+class AgePosts:
+
+    def GET(self):
+        controller.age_posts()
+
+    def POST(self):
+        controller.age_posts()
+
+class AgeSubscription:
+
+    def GET(self, key):
+        controller.age_subscription(key)
+
+    def POST(self, key):
+        controller.age_subscription(key)
+
+class PurgePosts:
+
+    def GET(self):
+        controller.purge_posts()
+
+    def POST(self):
+        controller.purge_posts()
+
+class PurgeFeed:
+
+    def GET(self, key):
+        controller.purge_feed(key)
+
+    def POST(self, key):
+        controller.purge_feed(key)
+
+class PurgeBadUsers:
+
+    def GET(self):
+        controller.purge_bad_users()
+
+    def POST(self):
+        controller.purge_bad_users()
+
+class DeleteUser:
+
+    def GET(self, key):
+        controller.delete_user(key)
+
+    def POST(self, key):
+        controller.delete_user(key)
+        
+web.webapi.internalerror = web.debugerror
+
+#import signal
+#def signal_handler(signal, frame):
+#    print 'You pressed Ctrl+C!'
+#    sys.exit(0)
+#signal.signal(signal.SIGINT, signal_handler)
+
+try:
+    from google.appengine.api import users
+    # we're running in appengine
+    import appengine
+    module = appengine
+except ImportError:
+    # not in appengine
+    import diskimpl
+    module = diskimpl
+
+controller = module.controller
+feeddb = module.feeddb
+
 if __name__ == "__main__":
     app = web.application(urls, globals())
-    app.run()
+    if controller.in_appengine():
+        app.cgirun()
+    else:
+        app.run()

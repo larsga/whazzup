@@ -1,8 +1,13 @@
-$def with (item, string, math, feeddb)
+$def with (item, string, math, feeddb, appengine)
 
-<style>
-th { text-align: left }
-</style>
+<link rel=stylesheet type="text/css" href="/static/style.css">
+
+<title>What's up - $(item.get_title())</title>
+<div class="topmenu">
+  <a href="/">Home</a> |
+  <a href="/sites">Feeds</a> |
+  Popular
+</div>
 <h1>$(item.get_title())</h1>
 <p>$(item.get_site().get_title())
 $if item.get_author():
@@ -19,9 +24,11 @@ $if item.get_author():
 <tr><th>Age <td>$item.get_age()
 <tr><th>Age factor <td>$(math.log(math.log(item.get_age())))
 <tr><th>Points <td>$item.get_points()
-$if not item.is_seen():
+$if appengine:
+    <tr><th>Stored points <td>$item.get_stored_points()
+$if not item.is_seen() and not appengine:
     <tr><th>Position <td>$(feeddb.get_no_of_item(item))
-<tr><th>URL <td>$item.get_link()
+<tr><th>URL <td><a href="$item.get_link()">$item.get_link()</a>
 <tr><th>GUID <td>$item.get_guid()
 $ site = item.get_site()
 <tr><th>Feed <td><a href="/site/$(site.get_local_id())">$(site.get_title())</a>

@@ -1,32 +1,62 @@
-$def with (feeds)
+$def with (feeds, appengine)
 
 <link rel=stylesheet type="text/css" href="static/style.css">
 
 <title>What's up - Sites</title>
+<div class="topmenu">
+  <a href="/">Home</a> |
+  Feeds |
+  <a href="/popular">Popular</a>
+</div>
 <h1>Sites</h1>
 
-<table>
-$ ix = 0
-$for site in feeds:
-    $ klass = ""
-    $ id = site.get_local_id()
-    $if site.get_error():
-        $ klass = "class=error"
-    <tr $klass>
-    <td><a href="/delete-site/$id"><img src=static/read.png></a>
-    <td><a href="site/$id">$(site.get_title())</a>
-    <td>$(len(site.get_items()))
-    <td>$(site.get_unread_count())
-    <td>$(site.get_ratio())
-    <td>$(int(site.time_since_last_read()))
-    <td>$(site.is_being_read())
-    $ ix += 1
-</table>
+$if feeds:
+    <table>
+    <tr><th>
+        <th>Feed
+    $if appengine:
+        <th>Max posts
+    $else:
+        <th>Posts
+          
+    <th>Score
+    <th>Last checked
+    $if not appengine:
+        <th>Unread
+        <th>Being read
+      
+    $for site in feeds:
+        $ klass = ""
+        $ id = site.get_local_id()
+        $if site.get_error():
+            $ klass = "class=error"
+        <tr $klass>
+        <td><a href="/delete-site/$id"><img src=static/read.png border=0></a>
+        <td><a href="site/$id">$(site.get_title())</a>
+        <td>$(site.get_item_count())
+        <td>$(str(site.get_ratio())[ : 4])
+        <td>$(site.nice_time_since_last_read())
+    $if not appengine:
+        <td>$(site.get_unread_count())
+        <td>$(site.is_being_read())
+    </table>
+$else:
+    <p>You are not subscribed to any feeds yet. Please subscribe to a
+    feed below.
+
+<h3>Select popular feed</h3>
+
+<p>See <a href="/popular">the list of most popular feeds</a>, to find
+a feed you want to subscribe to.
+
+<h3>Subscribe to feed</h3>
 
 <p><form method=post action="/addfeed">
 Feed URL: <input type=text name=url size=50><br>
 <input type=submit value="Add">
 </form>
+
+<h3>Import OPML feed list</h3>
 
 <p><form method=post enctype="multipart/form-data" action="/uploadopml">
 Import OPML feed list: <input type=file name=opml><br>
