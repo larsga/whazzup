@@ -141,6 +141,9 @@ class Database:
     
 class Feed:
 
+    def get_item_count(self):
+        raise NotImplementedError()
+    
     def time_since_last_read(self):
         raise NotImplementedError()
     

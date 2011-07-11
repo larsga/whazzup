@@ -202,6 +202,15 @@ class FeedDatabase(rsslib.FeedRegistry, feedlib.Database):
 
     # internal stuff
 
+    def _get_word_db(self):
+        return self._words
+
+    def _get_author_db(self):
+        return self._authors
+
+    def _get_site_db(self):
+        return self._sites
+        
     def read_feed(self, url):
         oldsite = self._feedurlmap.get(url)
         if oldsite:
@@ -258,7 +267,7 @@ class FeedDatabase(rsslib.FeedRegistry, feedlib.Database):
 
         return new_items
 
-class Feed(rsslib.SiteSummary):
+class Feed(rsslib.SiteSummary, feedlib.Feed):
 
     def __init__(self, url):
         rsslib.SiteSummary.__init__(self, url)
@@ -271,6 +280,9 @@ class Feed(rsslib.SiteSummary):
     def get_title(self):
         return rsslib.SiteSummary.get_title(self) or "[No title]"
 
+    def get_item_count(self):
+        return len(self.items)
+    
     def set_url(self, url):
         ratio = self.get_ratio()
         feeddb.change_site_url(self.get_url(), url)
@@ -467,7 +479,8 @@ def get_feeds():
 class WordDatabase(feedlib.WordDatabase):
 
     def __init__(self, filename):
-        feedlib.WordDatabase.__init__(self, dbm.open(filename, 'c'))
+        self._dbm = dbm.open(filename, 'c')
+        feedlib.WordDatabase.__init__(self, self._dbm)
 
     def _get_object(self, key):
         key = key.encode("utf-8")
@@ -477,6 +490,9 @@ class WordDatabase(feedlib.WordDatabase):
     def _put_object(self, key, ratio):
         key = key.encode("utf-8")
         self._words[key] = ("%s,%s" % ratio)
+
+    def close(self):
+        self._dbm.close()
         
 # ----- QUEUES
 
