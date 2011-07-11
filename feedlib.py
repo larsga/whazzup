@@ -118,7 +118,10 @@ class Database:
         
     # backend-specific
 
-    def commit(self):
+    def get_feeds(self):
+        raise NotImplementedError()
+        
+    def get_item_count(self):
         raise NotImplementedError()
         
     def get_item_range(self, low, high):
@@ -130,6 +133,13 @@ class Database:
     def seen_link(self, link):
         raise NotImplementedError()
 
+    def commit(self):
+        raise NotImplementedError()
+
+    def get_vote_stats(self):
+        "Returns a tuple (upvotes, downvotes)."
+        raise NotImplementedError()
+    
     def _get_word_db(self):
         raise NotImplementedError()
 
@@ -141,10 +151,53 @@ class Database:
     
 class Feed:
 
-    def get_item_count(self):
+    def get_local_id(self):
+        "String: internal ID of the feed."
+        raise NotImplementedError()
+
+    def get_title(self):
+        raise NotImplementedError()
+
+    def get_url(self):
+        "String: the URL of the XML feed."
+        raise NotImplementedError()
+    
+    def get_link(self):
+        "String: the URL of the feed's home page."
+        raise NotImplementedError()
+
+    def get_error(self):
+        """String: the text of the error message received when last
+        attempting to load this feed."""
+        raise NotImplementedError()
+
+    def get_time_to_wait(self):
+        "Seconds to wait between each time we poll the feed."
         raise NotImplementedError()
     
     def time_since_last_read(self):
+        "Seconds since last read."
+        raise NotImplementedError()
+    
+    def get_item_count(self):
+        raise NotImplementedError()
+
+    def get_ratio(self):
+        raise NotImplementedError()
+
+    def get_items(self):
+        raise NotImplementedError()
+
+    def record_vote(self, vote):
+        raise NotImplementedError()
+            
+    def is_being_read(self):
+        raise NotImplementedError()
+
+    def is_subscribed(self):
+        raise NotImplementedError()
+
+    def get_subscribers(self):
         raise NotImplementedError()
     
     # shared code
@@ -153,12 +206,33 @@ class Feed:
         return nice_time(int(self.time_since_last_read()))
     
 class Post:
-
+    
     def get_local_id(self):
+        raise NotImplementedError()
+
+    def get_title(self):
+        raise NotImplementedError()
+
+    def get_link(self):
+        raise NotImplementedError()
+    
+    def get_description(self):
+        raise NotImplementedError()
+
+    def get_pubdate(self):
         raise NotImplementedError()
 
     def get_age(self):
         "Returns age of post in seconds."
+        raise NotImplementedError()
+
+    def get_site(self):
+        raise NotImplementedError()
+
+    def get_guid(self):
+        raise NotImplementedError()
+
+    def get_author(self):
         raise NotImplementedError()
     
     # shared code

@@ -358,12 +358,6 @@ class DeleteUser:
         
 web.webapi.internalerror = web.debugerror
 
-#import signal
-#def signal_handler(signal, frame):
-#    print 'You pressed Ctrl+C!'
-#    sys.exit(0)
-#signal.signal(signal.SIGINT, signal_handler)
-
 try:
     from google.appengine.api import users
     # we're running in appengine
@@ -371,9 +365,12 @@ try:
     module = appengine
 except ImportError:
     # not in appengine
-    import diskimpl
-    users = diskimpl.users
-    module = diskimpl
+    # import diskimpl
+    # users = diskimpl.users
+    # module = diskimpl
+    import dbimpl
+    users = dbimpl.users
+    module = dbimpl
 
 controller = module.controller
 feeddb = module.feeddb
