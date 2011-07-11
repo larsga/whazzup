@@ -100,6 +100,9 @@ class FeedDatabase(rsslib.FeedRegistry, feedlib.Database):
     def get_items(self):
         return self._items
 
+    def get_item_range(self, low, high):
+        return self._items[low : high + 1]
+
     def get_no_of_item(self, item):
         try:
             self._lock.acquire()
@@ -390,6 +393,12 @@ class Link(feedlib.Post):
     def get_local_id(self):
         return id(self)
 
+    def get_age(self):
+        age = time.time() - feedlib.toseconds(self.get_date())
+        if age < 0:
+            age = 3600
+        return age
+    
     def get_date(self):
         if not self._date:
             self._date = feedlib.parse_date(self.get_pubdate())
@@ -459,7 +468,16 @@ class WordDatabase(feedlib.WordDatabase):
 
     def __init__(self, filename):
         feedlib.WordDatabase.__init__(self, dbm.open(filename, 'c'))
-    
+
+    def _get_object(self, key):
+        key = key.encode("utf-8")
+        (good, bad) = self._words.get(key, "0,0").split(",")
+        return (int(good), int(bad))
+
+    def _put_object(self, key, ratio):
+        key = key.encode("utf-8")
+        self._words[key] = ("%s,%s" % ratio)
+        
 # ----- QUEUES
 
 # ISSUES TO FIX:
@@ -560,7 +578,16 @@ def start_queue_worker():
     thread = threading.Thread(target = queue_worker, name = "FeedReader")
     thread.start()
     return thread
-    
+
+# ----- FAKING USER ACCOUNTS
+
+class UserDatabase:
+
+    def get_current_user(self):
+        return "[fake user]"
+
+users = UserDatabase()
+
 # ----- SETUP
     
 # set up temporary storage for vectors and descriptions

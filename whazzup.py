@@ -372,6 +372,7 @@ try:
 except ImportError:
     # not in appengine
     import diskimpl
+    users = diskimpl.users
     module = diskimpl
 
 controller = module.controller
