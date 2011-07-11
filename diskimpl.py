@@ -194,11 +194,11 @@ class FeedDatabase(rsslib.FeedRegistry, feedlib.Database):
     def record_author_vote(self, author, vote):
         self._authors.record_vote(author, vote)
     
-    def is_link_seen(self, uid):
-        return self._links.is_link_seen(uid)
+    def is_link_seen(self, link):
+        return self._links.is_link_seen(link)
 
-    def seen_link(self, uid):
-        self._links.seen_link(uid)
+    def seen_link(self, link):
+        self._links.seen_link(link)
 
     # internal stuff
 
@@ -283,7 +283,7 @@ class Feed(rsslib.SiteSummary):
         return feeddb.get_site_ratio(self.get_link())
 
     def get_local_id(self):
-        return id(self)
+        return str(id(self))
 
     def add_item_to_front(self, item):
         self.items.insert(0, item)
@@ -329,7 +329,7 @@ class Feed(rsslib.SiteSummary):
     def get_unread_count(self):
         count = 0
         for item in self.get_items():
-            if not feeddb.is_link_seen(item.get_guid()):
+            if not feeddb.is_link_seen(item):
                 count += 1
         return count
 
@@ -391,7 +391,7 @@ class Link(feedlib.Post):
         self._author = author
 
     def get_local_id(self):
-        return id(self)
+        return str(id(self))
 
     def get_age(self):
         age = time.time() - feedlib.toseconds(self.get_date())
@@ -427,13 +427,13 @@ class LinkTracker:
                 raise e
 
     def is_link_seen(self, link):
-        return self._links.has_key(link)
+        return self._links.has_key(link.get_guid())
 
     def seen_link(self, link):
-        self._links[link] = 1
+        self._links[link.get_guid()] = 1
         
         outf = open("seen-urls.txt", "a")
-        outf.write(link + "\n")
+        outf.write(link.get_guid() + "\n")
         outf.close()
 
 class WhazzupFactory(rsslib.DefaultFactory):

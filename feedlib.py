@@ -127,6 +127,9 @@ class Database:
     def get_word_ratio(self, word):
         raise NotImplementedError()
 
+    def seen_link(self, link):
+        raise NotImplementedError()
+
     def _get_word_db(self):
         raise NotImplementedError()
 
@@ -135,7 +138,7 @@ class Database:
 
     def _get_site_db(self):
         raise NotImplementedError()
-
+    
 class Feed:
 
     def time_since_last_read(self):
@@ -147,6 +150,9 @@ class Feed:
         return nice_time(int(self.time_since_last_read()))
     
 class Post:
+
+    def get_local_id(self):
+        raise NotImplementedError()
 
     def get_age(self):
         "Returns age of post in seconds."
@@ -213,7 +219,7 @@ class Post:
         return self._points
 
     def is_seen(self):
-        return feeddb.is_link_seen(self.get_guid())
+        return feeddb.is_link_seen(self)
 
     def record_vote(self, vote):
         feeddb.remove_item(self)
