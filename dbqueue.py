@@ -1,19 +1,27 @@
 
 import threading, time
-import dbimpl
+import sysv_ipc
+# importing dbimpl further down
 
 # ----- RECEIVING MESSAGE QUEUE
 
 class ReceivingMessageQueue:
 
     def __init__(self):
-        pass # connect to SYSV msg queue etc
+        # create queue, and fail if it already exists
+        self._mqueue = sysv_ipc.MessageQueue(7321, sysv_ipc.IPC_CREX)
 
     def get_next_message(self):
-        return None
+        try:
+            return self._mqueue.receive(False)[0] # discard type
+        except sysv_ipc.BusyError:
+            return None # no message available
+
+    def remove(self):
+        self._mqueue.remove()
 
 def queue_worker():
-    while True:
+    while not stop:
         msg = recv_mqueue.get_next_message()
         if not msg:
             time.sleep(1)
@@ -28,7 +36,30 @@ def queue_worker():
 class FindFeedsToCheck:
 
     def invoke(self):
-        pass # FIXME: do it
+        print "Find feeds to check"
+        dbimpl.cur.execute("""
+        select id from feeds where
+          last_read is null or
+          last_read < now() + (time_to_wait * interval '1 second')
+        """)
+        for (id) in dbimpl.cur.fetchall():
+            dbimpl.mqueue.send("CheckFeed %s" % id)
+
+class AgePosts:
+
+    def invoke(self):
+        print "Age posts" # FIXME: do it
+
+class PurgePosts:
+
+    def invoke(self):
+        print "Purge posts" # FIXME: do it
+
+class CheckFeed:
+
+    def invoke(self, feedid):
+        feedid = int(feedid)
+        print "Check feed", feedid
         
 # ----- CRON SERVICE
 
@@ -67,7 +98,7 @@ class RepeatableTask:
         raise NotImplementedError()
 
 def cron_worker():
-    while True:
+    while not stop:
         cron.run_tasks()
         time.sleep(1)
 
@@ -80,12 +111,33 @@ def start_cron_worker():
 
 class QueueTask(RepeatableTask):
 
-    def __init__(self, interval, message):
+    def __init__(self, message, interval):
         RepeatableTask.__init__(self, interval)
         self._message = message
 
     def _invoke(self):
-        msg_queue.send(message)
+        dbimpl.mqueue.send(self._message)
+
+# ----- CLEAN STOPPING
+
+stop = False
+import signal
+def signal_handler(signal, frame):
+    global stop
+    print "SIGINT received"
+    stop = True
+signal.signal(signal.SIGINT, signal_handler)
+
+# ------ SET UP MESSAGING
+
+msg_dict = {
+    "FindFeedsToCheck" : FindFeedsToCheck(),
+    "AgePosts" : AgePosts(),
+    "PurgePosts" : PurgePosts(),
+    "CheckFeed" : CheckFeed(),
+    }
+recv_mqueue = ReceivingMessageQueue()
+import dbimpl # this creates the sending message queue in this process
 
 # ----- SET UP CRON
         
@@ -93,10 +145,12 @@ cron = CronService()
 cron.add_task(QueueTask("FindFeedsToCheck", 600))
 cron.add_task(QueueTask("AgePosts", 3600))
 cron.add_task(QueueTask("PurgePosts", 86400))
-#cron_worker()
+start_cron_worker()
 
-# ------ SET UP MESSAGING
+# ----- START
 
-msg_dict = {
-    "FindFeedsToCheck" : FindFeedsToCheck(),
-    }
+queue_worker()
+
+# ----- SHUTDOWN CLEANUP
+
+recv_mqueue.remove()

@@ -1,9 +1,9 @@
 
 create table feeds (
   id serial primary key,
-  title varchar(100) not null,
+  title varchar(100),
   xmlurl varchar(200) not null,
-  htmlurl varchar(200) not null,
+  htmlurl varchar(200),
   error varchar(100),
   time_to_wait int not null,
   last_read timestamp

@@ -1,17 +1,47 @@
 
-import psycopg2
+import psycopg2, sysv_ipc
 import feedlib
 
 # ----- UTILITIES
 
 def query_for_value(query, args):
     cur.execute(query, args)
-    return cur.fetchone()[0]
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    else:
+        return None
 
 # ----- THE ACTUAL LOGIC
 
 class Controller(feedlib.Controller):
-    pass
+
+    def add_feed(self, url):
+        username = "larsga" # FIXME FIXME FIXME
+        
+        # does the feed exist already?
+        feedid = query_for_value("""
+        select id from feeds where xmlurl = %s
+        """, (url, ))
+
+        # if not, add it now
+        if not feedid:
+            feedid = query_for_value("""
+            insert into feeds (xmlurl, time_to_wait) values (%s, 10800)
+              returning id
+            """, (url, ))
+        
+        # if user is not already subscribed, add subscription
+        if not query_for_value("""select * from subscriptions where
+                            feed = %s and username = %s""", (feedid, username)):
+            update("insert into subscriptions values (%s, %s)",
+                   (feedid, username))
+
+        # make it all permanent
+        conn.commit()
+
+        # tell queue worker to check this feed
+        mqueue.send("CheckFeed %s" % feedid)
 
 class FeedDatabase(feedlib.Database):
 
@@ -38,8 +68,7 @@ class FeedDatabase(feedlib.Database):
         return [Item(id) for (id) in cur.fetchall()]
 
     def get_vote_stats(self):
-        return (0, 0)
-    
+        return (0, 0)    
 
 class Feed(feedlib.Feed):
 
@@ -68,7 +97,26 @@ users = UserDatabase()
 controller = Controller()
 feeddb = FeedDatabase("larsga")
 
-# ----- CONNECT TO DB
+# ----- SENDING MESSAGE QUEUE
+
+class SendingMessageQueue:
+
+    def __init__(self):
+        # create queue, and fail if it does not already exist
+        self._mqueue = sysv_ipc.MessageQueue(7321)
+
+    def send(self, msg):
+        # FIXME: we may have to queue messages here internally,
+        # because the queue size is so absurdly small. we have 2k on
+        # MacOS and 16k on Linux. not sure if this is going to be
+        # enough.
+        self._mqueue.send(msg)
+
+    def remove(self):
+        self._mqueue.remove()
+
+# ----- SET UP
 
 conn = psycopg2.connect("dbname=whazzup")
 cur = conn.cursor()
+mqueue = SendingMessageQueue()

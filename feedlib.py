@@ -91,6 +91,9 @@ def calculate_points(prob, postdate):
 class Controller:
     "A mediator between the UI and the backend."
 
+    def add_feed(self, url):
+        raise NotImplementedError()
+
     def in_appengine(self):
         return False
 
