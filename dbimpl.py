@@ -1,6 +1,6 @@
 
-import feedlib
 import psycopg2
+import feedlib
 
 # ----- UTILITIES
 
