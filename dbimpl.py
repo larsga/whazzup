@@ -1,4 +1,5 @@
 
+import datetime
 import psycopg2, sysv_ipc
 import feedlib
 
@@ -11,6 +12,9 @@ def query_for_value(query, args):
         return row[0]
     else:
         return None
+
+def update(query, args):
+    cur.execute(query, args)
 
 # ----- THE ACTUAL LOGIC
 
@@ -53,7 +57,8 @@ class FeedDatabase(feedlib.Database):
         cur.execute("""
           select feed from subscriptions where username = %s
         """, (self._username, ))
-        return [Feed(id) for (id) in cur.fetchall()]
+        return [Feed(id, None, None, None, None, None, None, None)
+                for (id) in cur.fetchall()]
 
     def get_item_count(self):
         return query_for_value("""
@@ -70,13 +75,54 @@ class FeedDatabase(feedlib.Database):
     def get_vote_stats(self):
         return (0, 0)    
 
+def load_feed(id):
+    cur.execute("select * from feeds where id = %s", (id, ))
+    return apply(Feed, cur.fetchone())
+    
 class Feed(feedlib.Feed):
 
-    def __init__(self, id):
+    def __init__(self, id, title, xmlurl, htmlurl, error, timetowait,
+                 lastread, lasterror):
         self._id = id
+        self._title = title
+        self._url = xmlurl
+        self._link = htmlurl
+        self._lastread = lastread
+        self._error = error
+        self._lasterror = lasterror
 
     def get_local_id(self):
         return str(self._id)
+
+    def get_title(self):
+        return self._title
+
+    def get_url(self):
+        return self._url
+
+    def get_link(self):
+        return self._link
+
+    def set_error(self, msg):
+        self._error = msg
+        self._lasterror = datetime.datetime.now()
+
+    def set_title(self, title):
+        self._title = title
+
+    def set_link(self, link):
+        self._link = link
+
+    def is_read_now(self):
+        self._lastread = datetime.datetime.now()
+
+    def save(self):
+        update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
+                                   last_error = %s
+                  where id = %s""",
+               (self._title, self._link, self._lastread, self._lasterror,
+                self._id))
+        conn.commit()
     
 class Item(feedlib.Post):
 

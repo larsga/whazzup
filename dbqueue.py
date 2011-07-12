@@ -1,6 +1,7 @@
 
-import threading, time
+import threading, time, atexit, traceback
 import sysv_ipc
+import rsslib
 # importing dbimpl further down
 
 # ----- RECEIVING MESSAGE QUEUE
@@ -60,6 +61,31 @@ class CheckFeed:
     def invoke(self, feedid):
         feedid = int(feedid)
         print "Check feed", feedid
+
+        # get feed
+        feed = dbimpl.load_feed(feedid)
+        
+        # read xml
+        try:
+            site = rsslib.read_feed(feed.get_url())
+        except Exception, e:
+            # we failed, so record the failure and move on
+            traceback.print_exc()
+            feed.set_error(str(e))
+            feed.save()
+            return
+        
+        # update feed row
+        feed.set_title(site.get_title())
+        feed.set_link(site.get_link())
+        feed.is_read_now()
+        feed.save()
+
+        # store all new items
+        # FIXME: let's do that later
+        
+        # recalc all subs on this feed (if new posts, that is)
+        # FIXME: nothing to recalculate just yet
         
 # ----- CRON SERVICE
 
@@ -137,6 +163,7 @@ msg_dict = {
     "CheckFeed" : CheckFeed(),
     }
 recv_mqueue = ReceivingMessageQueue()
+atexit.register(recv_mqueue.remove) # message queue cleanup
 import dbimpl # this creates the sending message queue in this process
 
 # ----- SET UP CRON
@@ -149,8 +176,9 @@ start_cron_worker()
 
 # ----- START
 
-queue_worker()
+try:
+    queue_worker()
+except:
+    stop = True
+    raise
 
-# ----- SHUTDOWN CLEANUP
-
-recv_mqueue.remove()

@@ -6,7 +6,8 @@ create table feeds (
   htmlurl varchar(200),
   error varchar(100),
   time_to_wait int not null,
-  last_read timestamp
+  last_read timestamp,
+  last_error timestamp
 );
 
 create table posts (
