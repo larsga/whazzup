@@ -440,13 +440,6 @@ class GAEFeedDatabase(feedlib.Database):
     def commit(self):
         self._get_word_db().close()
 
-    def get_word_ratio(self, word):
-        worddb = self._get_word_db()
-        return worddb.get_word_ratio(word)
-
-    def get_author_ratio(self, word):
-        return self.get_word_ratio(word) # should perhaps prefix, but...
-
     def remove_item(self, item):
         pass # I think we don't need this one
 
@@ -630,12 +623,6 @@ class PostWrapper(feedlib.Post):
 
     def get_pubdate(self):
         return str(self._post.pubdate)
-
-    def get_age(self):
-        age = time.time() - feedlib.toseconds(self._post.pubdate)
-        if age < 0:
-            age = 3600
-        return age
 
     def get_points(self):
         if not hasattr(self, "_points"):

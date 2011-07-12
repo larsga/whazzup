@@ -14,9 +14,10 @@ create table posts (
   id serial primary key,
   title varchar(100) not null,
   link varchar(200) not null,
-  descr varchar(200) not null, -- FIXME: should be unlimited!!
+  descr text not null,
   pubdate timestamp not null,
-  author varchar(100) not null
+  author varchar(100) not null,
+  feed int not null
 );
 
 create table subscriptions (
@@ -27,6 +28,7 @@ create table subscriptions (
 create table rated_posts (
   username varchar(20) not null,
   post int not null,
+  feed int not null,
   points float not null,
   last_recalc timestamp not null
 );

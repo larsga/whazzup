@@ -39,9 +39,10 @@ class FindFeedsToCheck:
     def invoke(self):
         print "Find feeds to check"
         dbimpl.cur.execute("""
-        select id from feeds where
+        select id from feeds
+          where
           last_read is null or
-          last_read < now() + (time_to_wait * interval '1 second')
+          last_read + (time_to_wait * interval '1 second') < now() 
         """)
         for (id) in dbimpl.cur.fetchall():
             dbimpl.mqueue.send("CheckFeed %s" % id)
@@ -64,6 +65,9 @@ class CheckFeed:
 
         # get feed
         feed = dbimpl.load_feed(feedid)
+        items = {} # url -> item (so we can check for new ones)
+        for item in feed.get_items():
+            items[item.get_link()] = item
         
         # read xml
         try:
@@ -82,11 +86,44 @@ class CheckFeed:
         feed.save()
 
         # store all new items
-        # FIXME: let's do that later
+        newposts = False
+        for newitem in site.get_items():
+            if items.has_key(newitem.get_link()):
+                continue
+
+            newposts = True
+            itemobj = dbimpl.Item(None, newitem.get_title(),
+                                  newitem.get_link(), newitem.get_description(),
+                                  newitem.get_pubdate(),
+                                  newitem.get_author(), feed)
+            itemobj.save()
         
         # recalc all subs on this feed (if new posts, that is)
-        # FIXME: nothing to recalculate just yet
-        
+        if newposts:
+            dbimpl.cur.execute("""select username from subscriptions where
+                               feed = %s""", (feed.get_local_id(), ))
+            for (user, ) in dbimpl.cur.fetchall():
+                dbimpl.mqueue.send("RecalculateSubscription %s %s" %
+                                   (feed.get_local_id(), user))
+
+class RecalculateSubscription:
+
+    def invoke(self, feedid, username):
+        feedid = int(feedid)
+        print "Recalculate subscription", feedid, username
+
+        feed = dbimpl.load_feed(feedid)
+        sub = dbimpl.Subscription(feed, username)
+        # FIXME: load all already rated posts on this subscription 
+        ratings = {} # str(postid) -> ratedpost
+
+        for item in feed.get_items():
+            rating = ratings.get(item.get_local_id())
+            if not rating:
+                rating = dbimpl.RatedPost(username, item, sub)
+            rating.recalculate()
+            rating.save()
+
 # ----- CRON SERVICE
 
 class CronService:
@@ -161,6 +198,7 @@ msg_dict = {
     "AgePosts" : AgePosts(),
     "PurgePosts" : PurgePosts(),
     "CheckFeed" : CheckFeed(),
+    "RecalculateSubscription" : RecalculateSubscription(),
     }
 recv_mqueue = ReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
@@ -181,4 +219,3 @@ try:
 except:
     stop = True
     raise
-

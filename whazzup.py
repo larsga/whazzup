@@ -166,8 +166,8 @@ class ShowItem:
             return render.not_logged_in(users.create_login_url("/"))
 
         try:
-            item = feeddb.get_item_by_id(id)
-            return render.item(item, string, math, feeddb,
+            rated = feeddb.get_rated_post_by_id(id, user)
+            return render.item(rated, rated.get_post(), string, math, feeddb,
                                controller.in_appengine())
         except KeyError, e:
             return "No such item: " + repr(id)

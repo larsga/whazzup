@@ -118,24 +118,43 @@ class Database:
 
     def record_site_vote(self, site, vote):
         self._get_site_db().record_vote(site, vote)
+
+    def get_word_ratio(self, word):
+        worddb = self._get_word_db()
+        return worddb.get_word_ratio(word)
+    
+    def get_author_ratio(self, word):
+        authordb = self._get_author_db()
+        return authordb.get_word_ratio(word)
         
     # backend-specific
 
     def get_feeds(self):
         raise NotImplementedError()
-        
+    
     def get_item_count(self):
         raise NotImplementedError()
         
     def get_item_range(self, low, high):
         raise NotImplementedError()
+
+    def get_item_by_id(self, id):
+        raise NotImplementedError() # do we need this? should it stay?
+
+    def get_rated_post_by_id(self, id, username):
+        raise NotImplementedError()
     
-    def get_word_ratio(self, word):
-        raise NotImplementedError()
-
     def seen_link(self, link):
+        "Marks the link as seen."
         raise NotImplementedError()
 
+    def is_link_seen(self, link):
+        "Returns true if the link has been seen."
+        raise NotImplementedError()
+
+    def get_no_of_item(self, item):
+        raise NotImplementedError()
+    
     def commit(self):
         raise NotImplementedError()
 
@@ -209,6 +228,9 @@ class Feed:
         return nice_time(int(self.time_since_last_read()))
     
 class Post:
+
+    def __init__(self):
+        self._date = None
     
     def get_local_id(self):
         raise NotImplementedError()
@@ -222,12 +244,20 @@ class Post:
     def get_description(self):
         raise NotImplementedError()
 
+    def get_date(self):
+        "Returns a datetime object representing the publication date."
+        if not self._date:
+            self._date = parse_date(self.get_pubdate())
+        return self._date
+    
     def get_pubdate(self):
         raise NotImplementedError()
 
     def get_age(self):
-        "Returns age of post in seconds."
-        raise NotImplementedError()
+        age = time.time() - toseconds(self.get_date())
+        if age < 0:
+            age = 3600
+        return age
 
     def get_site(self):
         raise NotImplementedError()
@@ -242,30 +272,9 @@ class Post:
 
     def nice_age(self):
         return nice_time(int(self.get_age()))
-
-    def get_word_probability(self):
-        probs = []
-        for (word, count) in self.get_vector().get_pairs():
-            for ix in range(count):
-                ratio = feeddb.get_word_ratio(word)
-                probs.append(ratio)
-
-        try:
-            if not probs:
-                return 0.5 # not sure how this could happen, though
-            else:
-                return compute_bayes(probs)
-        except ZeroDivisionError, e:
-            print "ZDE:", self.get_title().encode("utf-8"), probs            
     
     def get_author_vector(self):
         return vectors.text_to_vector(html2text(self.get_author() or ""))
-        
-    def get_overall_probability(self):
-        word_prob = self.get_word_probability()
-        site_prob = self.get_site_probability()
-        author_prob = self.get_author_probability()
-        return compute_bayes([word_prob, site_prob, author_prob])
 
     def get_url_tokens(self):
         tokens = self.get_link().split("/")
@@ -274,50 +283,6 @@ class Post:
             end = -2
         tokens = tokens[2 : end]
         return string.join(["url:" + t for t in tokens if chew.acceptable_term(t)])
-
-    def get_site_probability(self):
-        return self.get_site().get_ratio()
-        
-    def get_author_probability(self):
-        author = self.get_author()
-        if author:
-            author = string.strip(string.lower(author))
-            return feeddb.get_author_ratio(author)
-        else:
-            return 0.5
-        
-    def recalculate(self):
-        try:
-            prob = self.get_overall_probability()
-            self._points = calculate_points(prob, self.get_date())
-        except ZeroDivisionError, e:
-            #print "--------------------------------------------------"
-            print self.get_title().encode("utf-8")
-            self._points = 0
-    
-    def get_points(self):
-        return self._points
-
-    def is_seen(self):
-        return feeddb.is_link_seen(self)
-
-    def record_vote(self, vote):
-        feeddb.remove_item(self)
-
-        if vote != "read":
-            for (word, count) in self.get_vector().get_pairs():
-                for i in range(count):
-                    feeddb.record_word_vote(word, vote)
-            author = self.get_author()
-            if author:
-                author = string.strip(string.lower(author)) # move into feeddb
-                feeddb.record_author_vote(author, vote)
-
-            feeddb.record_site_vote(self.get_site().get_link(), vote)
-            feeddb.commit()
-            
-        feeddb.seen_link(self)
-        # the UI takes care of queueing a recalculation task
 
     def get_word_tokens(self):
         probs = []
@@ -332,6 +297,99 @@ class Post:
         text = html2text(html) + " " + self.get_url_tokens()
         vector = vectors.text_to_vector(text, {}, None, 1)
         return vector
+
+class Subscription:
+
+    def get_feed(self):
+        raise NotImplementedError()
+
+    def get_user(self):
+        raise NotImplementedError()
+
+    def get_ratio(self):
+        raise NotImplementedError()
+    
+class RatedPost:
+
+    def __init__(self, username, post, subscription, points = None):
+        self._post = post
+        self._subscription = subscription
+        self._username = username
+        self._points = points
+
+    def get_post(self):
+        return self._post
+
+    def get_subscription(self):
+        return self._subscription
+        
+    def get_points(self):
+        return self._points
+
+    def set_points(self, points):
+        self._points = points
+
+    def is_seen(self):
+        return feeddb.is_link_seen(self) # FIXME: not sure about this
+
+    def get_word_probability(self):
+        probs = []
+        for (word, count) in self._post.get_vector().get_pairs():
+            for ix in range(count):
+                ratio = feeddb.get_word_ratio(word)
+                probs.append(ratio)
+
+        try:
+            if not probs:
+                return 0.5 # not sure how this could happen, though
+            else:
+                return compute_bayes(probs)
+        except ZeroDivisionError, e:
+            print "ZDE:", self._post.get_title().encode("utf-8"), probs
+    
+    def get_overall_probability(self):
+        word_prob = self.get_word_probability()
+        site_prob = self.get_site_probability()
+        author_prob = self.get_author_probability()
+        return compute_bayes([word_prob, site_prob, author_prob])
+    
+    def get_site_probability(self):
+        return self.get_subscription().get_ratio()
+        
+    def get_author_probability(self):
+        author = self._post.get_author()
+        if author:
+            author = string.strip(string.lower(author))
+            return feeddb.get_author_ratio(author)
+        else:
+            return 0.5
+        
+    def recalculate(self):
+        try:
+            prob = self.get_overall_probability()
+            self._points = calculate_points(prob, self._post.get_date())
+        except ZeroDivisionError, e:
+            #print "--------------------------------------------------"
+            print self._post.get_title().encode("utf-8")
+            self._points = 0
+
+    def record_vote(self, vote):
+        feeddb.remove_item(self)
+
+        if vote != "read":
+            for (word, count) in self._post.get_vector().get_pairs():
+                for i in range(count):
+                    feeddb.record_word_vote(word, vote)
+            author = self._post.get_author()
+            if author:
+                author = string.strip(string.lower(author)) # move into feeddb
+                feeddb.record_author_vote(author, vote)
+
+            feeddb.record_site_vote(self._post.get_site().get_link(), vote)
+            feeddb.commit()
+            
+        feeddb.seen_link(self)
+        # the UI takes care of queueing a recalculation task
 
 # --- Word database
 

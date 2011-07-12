@@ -404,17 +404,6 @@ class Link(feedlib.Post):
 
     def get_local_id(self):
         return str(id(self))
-
-    def get_age(self):
-        age = time.time() - feedlib.toseconds(self.get_date())
-        if age < 0:
-            age = 3600
-        return age
-    
-    def get_date(self):
-        if not self._date:
-            self._date = feedlib.parse_date(self.get_pubdate())
-        return self._date
     
     def get_vector(self): # override to get caching
         key = str(id(self)) + "vector"
