@@ -59,10 +59,7 @@ class List:
             
         low = page * 25
         high = low + 25
-        return render.storylist(page,
-                                self.get_thread_health(),
-                                low, high,
-                                feeddb, controller.in_appengine())
+        return render.storylist(page, low, high, user)
 
     def get_thread_health(self):
         wait = controller.get_queue_delay()
@@ -120,9 +117,7 @@ class Sites:
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
         
-        sfeeds = feedlib.sort(feeddb.get_feeds(), lambda feed: feed.get_ratio())
-        sfeeds.reverse()
-        return render.sites(sfeeds, controller.in_appengine())
+        return render.sites(user.get_feeds(), controller.in_appengine())
 
 class PopularSites:
     def GET(self):
@@ -142,11 +137,8 @@ class Vote:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
-        link = feeddb.get_item_by_id(id)
-        link.record_vote(vote)
-        if vote != "read":
-            controller.recalculate_all_posts() # since scores have changed
+
+        controller.vote_received(user, id, vote)
 
         referrer = web.ctx.env.get('HTTP_REFERER')
         if referrer:
@@ -166,8 +158,8 @@ class ShowItem:
             return render.not_logged_in(users.create_login_url("/"))
 
         try:
-            rated = feeddb.get_rated_post_by_id(id, user)
-            return render.item(rated, rated.get_post(), string, math, feeddb,
+            rated = user.get_rated_post_by_id(id)
+            return render.item(rated, rated.get_post(), string, math, user,
                                controller.in_appengine())
         except KeyError, e:
             return "No such item: " + repr(id)
@@ -203,7 +195,9 @@ class AddFeed:
             return render.not_logged_in(users.create_login_url("/"))
         
         url = string.strip(web.input().get("url"))
-        controller.add_feed(url)
+        controller.add_feed(url, user)
+
+        # FIXME: this should be a bit prettier, don't you think?
         return "<p>Feed added to queue for processing.</p>"
 
 class AddFave:

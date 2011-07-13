@@ -78,12 +78,6 @@ class CheckFeed:
             feed.set_error(str(e))
             feed.save()
             return
-        
-        # update feed row
-        feed.set_title(site.get_title())
-        feed.set_link(site.get_link())
-        feed.is_read_now()
-        feed.save()
 
         # store all new items
         newposts = False
@@ -98,6 +92,12 @@ class CheckFeed:
                                   newitem.get_author(), feed)
             itemobj.save()
         
+        # update feed row
+        feed.set_title(site.get_title())
+        feed.set_link(site.get_link())
+        feed.is_read_now()
+        feed.save()
+            
         # recalc all subs on this feed (if new posts, that is)
         if newposts:
             dbimpl.cur.execute("""select username from subscriptions where
@@ -112,15 +112,36 @@ class RecalculateSubscription:
         feedid = int(feedid)
         print "Recalculate subscription", feedid, username
 
+        user = dbimpl.User(username)
         feed = dbimpl.load_feed(feedid)
-        sub = dbimpl.Subscription(feed, username)
-        # FIXME: load all already rated posts on this subscription 
-        ratings = {} # str(postid) -> ratedpost
+        sub = dbimpl.Subscription(feed, user)
+        
+        # load all already rated posts on this subscription 
+        ratings = {} # int(postid) -> ratedpost
+        dbimpl.cur.execute("""
+          select username, post, points from rated_posts
+          where username = %s and feed = %s
+        """, (username, feedid))
+        for (username, postid, points) in dbimpl.cur.fetchall():
+            post = dbimpl.feeddb.get_item_by_id(postid)
+            if post:
+                # may have been removed in the meantime
+                ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
+
+        # load all seen posts
+        seen = dbimpl.query_for_set("""
+          select post from read_posts
+          where username = %s and feed = %s
+        """, (username, feedid))
 
         for item in feed.get_items():
-            rating = ratings.get(item.get_local_id())
+            id = int(item.get_local_id())
+            if id in seen:
+                continue # user has already read item, nothing further to do
+            
+            rating = ratings.get(id)
             if not rating:
-                rating = dbimpl.RatedPost(username, item, sub)
+                rating = dbimpl.RatedPost(user, item, sub)
             rating.recalculate()
             rating.save()
 

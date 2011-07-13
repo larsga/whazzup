@@ -1,4 +1,4 @@
-$def with (rated, item, string, math, feeddb, appengine)
+$def with (rated, item, string, math, user, appengine)
 
 <link rel=stylesheet type="text/css" href="/static/style.css">
 
@@ -16,22 +16,22 @@ $if item.get_author():
 <p>$:(item.get_description())</p>
 
 <table>
-<tr><th>Site prob <td>rated.get_site_probability()
-<tr><th>Word prob <td>rated.get_word_probability()
-<tr><th>Author prob <td>rated.get_author_probability()
-<tr><th>Overall prob <td>rated.get_overall_probability()
+<tr><th>Site prob <td>$rated.get_site_probability()
+<tr><th>Word prob <td>$rated.get_word_probability()
+<tr><th>Author prob <td>$rated.get_author_probability()
+<tr><th>Overall prob <td>$rated.get_overall_probability()
 <tr><th>Pub date <td>$item.get_pubdate()
 <tr><th>Age <td>$item.get_age()
 <tr><th>Age factor <td>$(math.log(math.log(item.get_age())))
-<tr><th>Points <td>rated.get_points()
+<tr><th>Points <td>$rated.get_points()
 $if appengine:
     <tr><th>Stored points <td>rated.get_stored_points()
 $if not rated.is_seen() and not appengine:
-    <tr><th>Position <td>$(feeddb.get_no_of_item(item))
+    <tr><th>Position <td>$(user.get_no_of_item(item))
 <tr><th>URL <td><a href="$item.get_link()">$item.get_link()</a>
 <tr><th>GUID <td>$item.get_guid()
 $ site = item.get_site()
 <tr><th>Feed <td><a href="/site/$(site.get_local_id())">$(site.get_title())</a>
 </table>
 
-<p>$(item.get_word_tokens())
+<p>$(rated.get_word_tokens())

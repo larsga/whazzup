@@ -1,5 +1,6 @@
 
-import time, vectors, operator, string, math, formatmodules, HTMLParser, rsslib, codecs, traceback, cgi, chew, datetime
+import time, vectors, operator, string, math, formatmodules, HTMLParser, rsslib
+import codecs, traceback, cgi, chew, datetime
 from xml.sax import SAXException
 
 # --- Constants
@@ -91,6 +92,9 @@ def calculate_points(prob, postdate):
 class Controller:
     "A mediator between the UI and the backend."
 
+    def vote_received(self, user, id, vote):
+        raise NotImplementedError()
+    
     def add_feed(self, url):
         raise NotImplementedError()
 
@@ -100,76 +104,18 @@ class Controller:
     def get_queue_delay(self):
         return 0
 
-    def recalculate_all_posts(self):
-        pass
+    def recalculate_all_posts(self, user):
+        raise NotImplementedError()
 
 # --- Model
 
 class Database:
 
-    def __init__(self):
-        pass
-
-    def record_word_vote(self, word, vote):
-        self._get_word_db().record_vote(word, vote)
-
-    def record_author_vote(self, author, vote):
-        self._get_author_db().record_vote(author, vote)
-
-    def record_site_vote(self, site, vote):
-        self._get_site_db().record_vote(site, vote)
-
-    def get_word_ratio(self, word):
-        worddb = self._get_word_db()
-        return worddb.get_word_ratio(word)
-    
-    def get_author_ratio(self, word):
-        authordb = self._get_author_db()
-        return authordb.get_word_ratio(word)
-        
-    # backend-specific
-
-    def get_feeds(self):
+    def add_feed(self, url):
         raise NotImplementedError()
     
-    def get_item_count(self):
-        raise NotImplementedError()
-        
-    def get_item_range(self, low, high):
-        raise NotImplementedError()
-
     def get_item_by_id(self, id):
         raise NotImplementedError() # do we need this? should it stay?
-
-    def get_rated_post_by_id(self, id, username):
-        raise NotImplementedError()
-    
-    def seen_link(self, link):
-        "Marks the link as seen."
-        raise NotImplementedError()
-
-    def is_link_seen(self, link):
-        "Returns true if the link has been seen."
-        raise NotImplementedError()
-
-    def get_no_of_item(self, item):
-        raise NotImplementedError()
-    
-    def commit(self):
-        raise NotImplementedError()
-
-    def get_vote_stats(self):
-        "Returns a tuple (upvotes, downvotes)."
-        raise NotImplementedError()
-    
-    def _get_word_db(self):
-        raise NotImplementedError()
-
-    def _get_author_db(self):
-        raise NotImplementedError()
-
-    def _get_site_db(self):
-        raise NotImplementedError()
     
 class Feed:
 
@@ -208,9 +154,6 @@ class Feed:
         raise NotImplementedError()
 
     def get_items(self):
-        raise NotImplementedError()
-
-    def record_vote(self, vote):
         raise NotImplementedError()
             
     def is_being_read(self):
@@ -284,19 +227,69 @@ class Post:
         tokens = tokens[2 : end]
         return string.join(["url:" + t for t in tokens if chew.acceptable_term(t)])
 
-    def get_word_tokens(self):
-        probs = []
-        for (word, count) in self.get_vector().get_pairs():
-            for ix in range(count):
-                ratio = feeddb.get_word_ratio(word)
-                probs.append("%s : %s" % (escape(word), ratio))
-        return ", ".join(probs)
-
     def get_vector(self):
         html = (self.get_title() or "") + " " + (self.get_description() or "")
         text = html2text(html) + " " + self.get_url_tokens()
         vector = vectors.text_to_vector(text, {}, None, 1)
         return vector
+
+class User:
+
+    def get_username(self):
+        "Returns user name as a string."
+        raise NotImplementedError()
+    
+    def record_word_vote(self, word, vote):
+        self._get_word_db().record_vote(word, vote)
+
+    def record_author_vote(self, author, vote):
+        self._get_author_db().record_vote(author, vote)
+
+    def record_site_vote(self, site, vote):
+        self._get_site_db().record_vote(site, vote)
+
+    def get_word_ratio(self, word):
+        worddb = self._get_word_db()
+        return worddb.get_word_ratio(word)
+    
+    def get_author_ratio(self, word):
+        authordb = self._get_author_db()
+        return authordb.get_word_ratio(word)
+
+    def get_feeds(self):
+        "Return the feeds the user is subscribed to, sorted by voting ratio."
+        raise NotImplementedError()
+    
+    def get_item_count(self):
+        raise NotImplementedError()
+        
+    def get_item_range(self, low, high):
+        raise NotImplementedError()
+
+    def get_rated_post_by_id(self, id):
+        raise NotImplementedError()
+
+    def get_no_of_item(self, item):
+        raise NotImplementedError()
+    
+    def commit(self):
+        raise NotImplementedError()
+
+    def subscribe(self, feed):
+        raise NotImplementedError()
+
+    def get_vote_stats(self):
+        "Returns a tuple (upvotes, downvotes)."
+        raise NotImplementedError()
+    
+    def _get_word_db(self):
+        raise NotImplementedError()
+
+    def _get_author_db(self):
+        raise NotImplementedError()
+
+    def _get_site_db(self):
+        raise NotImplementedError()
 
 class Subscription:
 
@@ -311,10 +304,10 @@ class Subscription:
     
 class RatedPost:
 
-    def __init__(self, username, post, subscription, points = None):
+    def __init__(self, user, post, subscription, points = None):
         self._post = post
         self._subscription = subscription
-        self._username = username
+        self._user = user
         self._points = points
 
     def get_post(self):
@@ -324,19 +317,26 @@ class RatedPost:
         return self._subscription
         
     def get_points(self):
+        if self._points is None:
+            self.recalculate()
         return self._points
 
     def set_points(self, points):
         self._points = points
 
-    def is_seen(self):
-        return feeddb.is_link_seen(self) # FIXME: not sure about this
+    def seen(self):
+        "Marks the link as seen."
+        raise NotImplementedError()
 
+    def is_seen(self):
+        "Returns true iff the link has been seen."
+        raise NotImplementedError()
+    
     def get_word_probability(self):
         probs = []
         for (word, count) in self._post.get_vector().get_pairs():
             for ix in range(count):
-                ratio = feeddb.get_word_ratio(word)
+                ratio = self._user.get_word_ratio(word)
                 probs.append(ratio)
 
         try:
@@ -360,7 +360,7 @@ class RatedPost:
         author = self._post.get_author()
         if author:
             author = string.strip(string.lower(author))
-            return feeddb.get_author_ratio(author)
+            return self._user.get_author_ratio(author)
         else:
             return 0.5
         
@@ -374,23 +374,30 @@ class RatedPost:
             self._points = 0
 
     def record_vote(self, vote):
-        feeddb.remove_item(self)
+        if vote == "read":
+            return # should never happen
+        
+        for (word, count) in self._post.get_vector().get_pairs():
+            for i in range(count):
+                self._user.record_word_vote(word, vote)
+        author = self._post.get_author()
+        if author:
+            author = string.strip(string.lower(author)) # move into User
+            self._user.record_author_vote(author, vote)
 
-        if vote != "read":
-            for (word, count) in self._post.get_vector().get_pairs():
-                for i in range(count):
-                    feeddb.record_word_vote(word, vote)
-            author = self._post.get_author()
-            if author:
-                author = string.strip(string.lower(author)) # move into feeddb
-                feeddb.record_author_vote(author, vote)
+        self._user.record_site_vote(self._post.get_site().get_link(), vote)
+        self._user.commit()
+        
+        # the controller takes care of queueing a recalculation task
 
-            feeddb.record_site_vote(self._post.get_site().get_link(), vote)
-            feeddb.commit()
-            
-        feeddb.seen_link(self)
-        # the UI takes care of queueing a recalculation task
-
+    def get_word_tokens(self):
+        probs = []
+        for (word, count) in self._post.get_vector().get_pairs():
+            for ix in range(count):
+                ratio = self._user.get_word_ratio(word)
+                probs.append("%s : %s" % (escape(word), ratio))
+        return ", ".join(probs)
+        
 # --- Word database
 
 # FIXME: this needs to be properly generalized

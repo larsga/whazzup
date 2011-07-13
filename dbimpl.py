@@ -19,13 +19,49 @@ def query_for_value(query, args):
 def update(query, args):
     cur.execute(query, args)
 
+def query_for_set(query, args):
+    cur.execute(query, args)
+    return set([row[0] for row in cur.fetchall()])
+
+def query_for_list(query, args):
+    cur.execute(query, args)
+    return [row[0] for row in cur.fetchall()]
+
 # ----- THE ACTUAL LOGIC
+
+# FIXME: ideally this class should be completely generic, so that only the
+# backend code differs between implementations. should be doable.
 
 class Controller(feedlib.Controller):
 
+    def vote_received(self, user, id, vote):
+        link = user.get_rated_post_by_id(id)
+        link.seen()
+        if vote != "read":
+            link.record_vote(vote)
+            self.recalculate_all_posts(user) # since scores have changed
+    
+    def add_feed(self, url, user):
+        feed = feeddb.add_feed(url)
+        user.subscribe(feed)
+
+        # make it all permanent
+        conn.commit()
+
+        # tell queue worker to check this feed
+        mqueue.send("CheckFeed %s" % feed.get_local_id())
+
+    def recalculate_all_posts(self, user):
+        allsubs = query_for_list("""select feed from subscriptions
+                                    where username = %s""",
+                                 (user.get_username(), ))
+        for feedid in allsubs:
+            mqueue.send("RecalculateSubscription %s %s" %
+                        (feedid, user.get_username()))
+
+class FeedDatabase(feedlib.Database):
+
     def add_feed(self, url):
-        username = "larsga" # FIXME 
-        
         # does the feed exist already?
         feedid = query_for_value("""
         select id from feeds where xmlurl = %s
@@ -37,83 +73,19 @@ class Controller(feedlib.Controller):
             insert into feeds (xmlurl, time_to_wait) values (%s, 10800)
               returning id
             """, (url, ))
-        
-        # if user is not already subscribed, add subscription
-        if not query_for_value("""select * from subscriptions where
-                            feed = %s and username = %s""", (feedid, username)):
-            update("insert into subscriptions values (%s, %s)",
-                   (feedid, username))
 
-        # make it all permanent
-        conn.commit()
-
-        # tell queue worker to check this feed
-        mqueue.send("CheckFeed %s" % feedid)
-
-class FeedDatabase(feedlib.Database):
-
-    def __init__(self, username):
-        "Creates database of the user's subscriptions."
-        self._username = username
-        self._worddb = None
-
-    def get_feeds(self):
-        cur.execute("""
-          select feed from subscriptions where username = %s
-        """, (self._username, ))
-        return [Feed(id, None, None, None, None, None, None, None)
-                for (id) in cur.fetchall()]
-
-    def get_item_count(self):
-        return query_for_value("""
-               select count(*) from rated_posts where username = %s
-               """, [self._username])
-
-    def get_item_range(self, low, high):
-        # FIXME: this is both performance-critical and slow...
-        cur.execute("""
-          select id, title, link, descr, pubdate, author, p.feed
-          from posts p
-          join rated_posts on id = post
-          where username = %s
-          order by points desc limit %s offset %s
-        """, (self._username, (high - low), low))
-        return [Item(id, title, link, descr, date, author, load_feed(feed)) for
-                (id, title, link, descr, date, author, feed) in
-                cur.fetchall()]
+        return Feed(feedid, None, url, None, None, None, None, None)
 
     def get_item_by_id(self, itemid):
         itemid = int(itemid)
         cur.execute("select * from posts where id = %s", (itemid, ))
-        (id, title, link, descr, date, author, feedid) = cur.fetchone()
+        row = cur.fetchone()
+        if not row:
+            return None
+        (id, title, link, descr, date, author, feedid) = row
         return Item(id, title, link, descr, date, author, load_feed(feedid))
-
-    def get_rated_post_by_id(self, itemid, username):
-        item = self.get_item_by_id(itemid)
-        sub = Subscription(item.get_site(), username)
-        return RatedPost(username, item, sub)
-
-    def get_vote_stats(self):
-        return (0, 0) # FIXME
-
-    def is_link_seen(self, link):
-        return False # FIXME
-
-    def get_no_of_item(self, item):
-        return 0 # FIXME
     
-    def _get_word_db(self):
-        if not self._worddb:
-            self._worddb = WordDatabase(self._username + ".dbm")
-        return self._worddb
-
-    def _get_author_db(self):
-        return self._get_word_db()
-
-    def _get_site_db(self):
-        return self._get_word_db()
-    
-def load_feed(id):
+def load_feed(id): # FIXME: obviously belongs in feed db
     cur.execute("select * from feeds where id = %s", (id, ))
     return apply(Feed, cur.fetchone())
     
@@ -133,7 +105,7 @@ class Feed(feedlib.Feed):
         return str(self._id)
 
     def get_title(self):
-        return self._title
+        return self._title or "[No title]"
 
     def get_url(self):
         return self._url
@@ -148,6 +120,21 @@ class Feed(feedlib.Feed):
         return [Item(id, title, link, descr, pubdate, author, self) for
                 (id, title, link, descr, pubdate, author, feed) in
                 cur.fetchall()]
+
+    def get_item_count(self):
+        return query_for_value("select count(*) from posts where feed = %s",
+                               (self._id, ))
+
+    def get_error(self):
+        return self._error
+
+    def time_since_last_read(self):
+        "Seconds since last read."
+        if self._lastread:
+            return (feedlib.toseconds(datetime.datetime.now()) -
+                    feedlib.toseconds(self._lastread))
+        else:
+            return 0
     
     def set_error(self, msg):
         self._error = msg
@@ -169,6 +156,15 @@ class Feed(feedlib.Feed):
                (self._title, self._link, self._lastread, self._lasterror,
                 self._id))
         conn.commit()
+
+    def get_ratio(self):
+        return "# FIXME" # FIXME
+
+    def get_unread_count(self):
+        return "# FIXME" # FIXME
+
+    def is_being_read(self):
+        return "# FIXME" # FIXME
     
 class Item(feedlib.Post):
 
@@ -180,6 +176,7 @@ class Item(feedlib.Post):
         self._date = date # date object
         self._author = author
         self._feed = feed
+        self._pubdate = None
 
     def get_local_id(self):
         return str(self._id)
@@ -200,7 +197,10 @@ class Item(feedlib.Post):
         return self._author
 
     def get_pubdate(self):
-        return str(self.get_date())
+        if self._date:
+            return str(self.get_date())
+        else:
+            return None
 
     def get_site(self):
         return self._feed
@@ -211,7 +211,7 @@ class Item(feedlib.Post):
 
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s)
-        """, (self._title, self._link, self._descr, self._pubdate,
+        """, (self._title, self._link, self._descr, self.get_pubdate(),
               self._author, self._feed.get_local_id()))
         conn.commit()
 
@@ -232,20 +232,34 @@ class Subscription(feedlib.Subscription):
         
 class RatedPost(feedlib.RatedPost):
 
-    def __init__(self, username, item, subscription, points = None):
-        feedlib.RatedPost.__init__(self, username, item, subscription, points)
+    def __init__(self, user, post, subscription, points = None):
+        feedlib.RatedPost.__init__(self, user, post, subscription, points)
         self._points = points
-        self._exists_in_db = (points is not None)
+        self._exists_in_db = (points is not None) # FIXME: dubious
 
+    def is_seen(self):
+        return False # FIXME
+        
+    def seen(self):
+        # first remove the rating
+        update("delete from rated_posts where username = %s and post = %s",
+               (self._user.get_username(), int(self._post.get_local_id())))
+
+        # then make a note that we've read it
+        update("insert into read_posts values (%s, %s, %s)",
+               (self._user.get_username(), int(self._post.get_local_id()),
+                int(self._subscription.get_feed().get_local_id())))
+        conn.commit()
+        
     def save(self):
         if self._exists_in_db:
             update("""update rated_posts set points = %s, last_recalc = now()
                       where username = %s and post = %s""",
-                   (self._points, self._username,
+                   (self._points, self._user.get_username(),
                     int(self._post.get_local_id())))
         else:
             update("insert into rated_posts values (%s, %s, %s, %s, now())",
-                   (self._username,
+                   (self._user.get_username(),
                     int(self._post.get_local_id()),
                     int(self.get_subscription().get_feed().get_local_id()),
                     self._points))
@@ -278,13 +292,88 @@ class WordDatabase(feedlib.WordDatabase):
 class UserDatabase:
 
     def get_current_user(self):
-        return "larsga"
+        return User("larsga") # FIXME
 
-users = UserDatabase()
-controller = Controller()
-feeddb = FeedDatabase("larsga") # FIXME
-feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
+# ----- USER OBJECT
 
+class User(feedlib.User):
+
+    def __init__(self, username):
+        self._username = username
+        self._worddb = None
+
+    def get_username(self):
+        return self._username
+
+    def get_feeds(self):
+        # FIXME: sort by score
+        cur.execute("""
+          select id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
+                 last_error
+          from feeds
+          join subscriptions on id = feed
+          where username = %s
+        """, (self._username, ))
+        return [Feed(id, title, xmlurl, htmlurl, error, time_to_wait,
+                     last_read, last_error)
+                for (id, title, xmlurl, htmlurl, error, time_to_wait,
+                     last_read, last_error)
+                in cur.fetchall()]
+
+    def get_item_count(self):
+        return query_for_value("""
+               select count(*) from rated_posts where username = %s
+               """, [self._username])
+
+    def get_item_range(self, low, high):
+        # FIXME: this is both performance-critical and slow...
+        cur.execute("""
+          select id, title, link, descr, pubdate, author, p.feed
+          from posts p
+          join rated_posts on id = post
+          where username = %s
+          order by points desc limit %s offset %s
+        """, (self._username, (high - low), low))
+        return [Item(id, title, link, descr, date, author, load_feed(feed)) for
+                (id, title, link, descr, date, author, feed) in
+                cur.fetchall()]
+
+    def get_rated_post_by_id(self, itemid):
+        item = feeddb.get_item_by_id(itemid)
+        sub = Subscription(item.get_site(), self._username)
+        return RatedPost(self, item, sub)
+
+    def get_vote_stats(self):
+        return (0, 0) # FIXME
+
+    def get_no_of_item(self, item):
+        return 0 # FIXME
+    
+    def _get_word_db(self):
+        if not self._worddb:
+            self._worddb = WordDatabase(self._username + ".dbm")
+        return self._worddb
+
+    def _get_author_db(self):
+        return self._get_word_db()
+
+    def _get_site_db(self):
+        return self._get_word_db()
+
+    def commit(self):
+        """A desperate attempt to preserve DB changes even in the face of
+        crashes."""
+        self._worddb.close()
+        self._worddb = None
+
+    def subscribe(self, feed):
+        key = (int(feed.get_local_id()), self._username)
+        
+        # if user is not already subscribed, add subscription
+        if not query_for_value("""select * from subscriptions where
+                            feed = %s and username = %s""", key):
+            update("insert into subscriptions values (%s, %s)", key)
+    
 # ----- SENDING MESSAGE QUEUE
 
 class SendingMessageQueue:
@@ -304,6 +393,11 @@ class SendingMessageQueue:
         self._mqueue.remove()
 
 # ----- SET UP
+        
+users = UserDatabase()
+controller = Controller()
+feeddb = FeedDatabase()
+feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 
 conn = psycopg2.connect("dbname=whazzup")
 cur = conn.cursor()

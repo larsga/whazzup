@@ -16,7 +16,7 @@ create table posts (
   link varchar(200) not null,
   descr text not null,
   pubdate timestamp not null,
-  author varchar(100) not null,
+  author varchar(100),
   feed int not null
 );
 
@@ -32,3 +32,11 @@ create table rated_posts (
   points float not null,
   last_recalc timestamp not null
 );
+
+create table read_posts (
+  username varchar(20) not null,
+  post int not null,
+  feed int not null,
+  PRIMARY KEY (username, post)
+);
+

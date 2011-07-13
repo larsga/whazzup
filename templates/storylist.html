@@ -1,4 +1,4 @@
-$def with (page, thread_health, low, high, feeddb, appengine)
+$def with (page, low, high, user)
 
 <link rel=stylesheet type="text/css" href="static/style.css">
 
@@ -12,10 +12,7 @@ $def with (page, thread_health, low, high, feeddb, appengine)
 
 <h1>What's up</h1>
 
-$if not appengine:
-  <div class=health>$:thread_health<br>Items: $(feeddb.get_item_count())</div>
-
-$ items = feeddb.get_item_range(low, high)
+$ items = user.get_item_range(low, high)
 
 $if not items and low == 0:
     <p>You have no news. Probably this is because you haven't
@@ -49,17 +46,10 @@ $if items:
     $if page:
         <a href="/$(page - 1)">previous</a>
     
-    $for ix in range((feeddb.get_item_count() / 25) + 1):
+    $for ix in range((user.get_item_count() / 25) + 1):
         $if ix == page:
             <b>$(ix + 1)</b>
         $else:
             <a href="/$ix">$(ix + 1)</a>
     $if len(items) == 25:
         <a href="/$(page + 1)">next</a>
-
-$if not appengine:
-    <p><a href="/reload">Reload</a> | 
-    <a href="/sites">Feeds</a> | 
-    <a href="/shutdown">Shutdown</a> | 
-    <a href="/recalc">Recalculate</a>
-    <p>Up: $(feeddb.get_vote_stats()[0]), down: $(feeddb.get_vote_stats()[1])
