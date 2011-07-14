@@ -1,9 +1,6 @@
 
 # TODO
 
-# - aging of posts
-# - purge posts
-# - set limit for number of posts
 # - user database
 # - list of popular feeds
 # - OPML import
@@ -62,12 +59,7 @@ class Controller(feedlib.Controller):
         mqueue.send("CheckFeed %s" % feed.get_local_id())
 
     def recalculate_all_posts(self, user):
-        allsubs = query_for_list("""select feed from subscriptions
-                                    where username = %s""",
-                                 (user.get_username(), ))
-        for feedid in allsubs:
-            mqueue.send("RecalculateSubscription %s %s" %
-                        (feedid, user.get_username()))
+        mqueue.send("RecalculateAllPosts %s" % user.get_username())
 
     def unsubscribe(self, feedid, user):
         sub = user.get_subscription(feedid)
@@ -88,7 +80,7 @@ class FeedDatabase(feedlib.Database):
               returning id
             """, (url, ))
 
-        return Feed(feedid, None, url, None, None, None, None, None)
+        return Feed(feedid, None, url, None, None, None, None, None, None)
 
     def get_item_by_id(self, itemid):
         itemid = int(itemid)
@@ -107,7 +99,7 @@ class FeedDatabase(feedlib.Database):
 class Feed(feedlib.Feed):
 
     def __init__(self, id, title, xmlurl, htmlurl, error, timetowait,
-                 lastread, lasterror):
+                 lastread, lasterror, maxposts):
         self._id = id
         self._title = title
         self._url = xmlurl
@@ -116,6 +108,7 @@ class Feed(feedlib.Feed):
         self._error = error
         self._lasterror = lasterror
         self._time_to_wait = timetowait
+        self._maxposts = maxposts
 
     def get_local_id(self):
         return str(self._id)
@@ -131,7 +124,7 @@ class Feed(feedlib.Feed):
 
     def get_items(self):
         cur.execute("""
-        select * from posts where feed = %s
+        select * from posts where feed = %s order by pubdate desc
         """, (self._id, ))
         return [Item(id, title, link, descr, pubdate, author, self) for
                 (id, title, link, descr, pubdate, author, feed) in
@@ -167,11 +160,17 @@ class Feed(feedlib.Feed):
 
     def save(self):
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
-                                   last_error = %s
+                                   last_error = %s, max_posts = %s
                   where id = %s""",
                (self._title, self._link, self._lastread, self._lasterror,
-                self._id))
+                self._maxposts, self._id))
         conn.commit()
+
+    def get_max_posts(self):
+        return self._maxposts
+
+    def set_max_posts(self, maxposts):
+        self._maxposts = maxposts
 
     def get_ratio(self):
         return "# FIXME" # FIXME
@@ -229,6 +228,13 @@ class Item(feedlib.Post):
         if self._id:
             raise NotImplementedError()
 
+        if len(self._title) > 200:
+            print "Title:", len(self._title)
+        if len(self._link) > 400:
+            print "Link:", len(self._link)
+        if self._author and len(self._author) > 100:
+            print "Author:", len(self._author)
+        
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s)
         """, (self._title, self._link, self._descr, self.get_pubdate(),
@@ -237,6 +243,12 @@ class Item(feedlib.Post):
 
     def is_seen(self):
         return False # FIXME
+
+    def delete(self):
+        update("delete from read_posts where post = %s", self._id)
+        update("delete from rated_posts where post = %s", self._id)
+        update("delete from posts where id = %s", self._id)
+        conn.commit()
 
 class Subscription(feedlib.Subscription):
 
@@ -248,12 +260,12 @@ class Subscription(feedlib.Subscription):
         return self._feed
 
     def get_rated_posts(self):
-        cur.execute("""select post, points from rated_posts
+        cur.execute("""select post, points, prob from rated_posts
                     where username = %s and feed = %s""",
                     (self._user.get_username(), int(self._feed.get_local_id())))
         return [RatedPost(self._user,
-                          feeddb.get_item_by_id(postid),
-                          self, points) for (postid, points) in cur.fetchall()]
+                          feeddb.get_item_by_id(postid), self, points, prob)
+                for (postid, points, prob) in cur.fetchall()]
     
     def get_user(self):
         return self._user
@@ -271,9 +283,8 @@ class Subscription(feedlib.Subscription):
 
 class RatedPost(feedlib.RatedPost):
 
-    def __init__(self, user, post, subscription, points = None):
-        feedlib.RatedPost.__init__(self, user, post, subscription, points)
-        self._points = points
+    def __init__(self, user, post, subscription, points = None, prob = None):
+        feedlib.RatedPost.__init__(self, user, post, subscription, points, prob)
         self._exists_in_db = (points is not None) # FIXME: dubious
 
     def is_seen(self):
@@ -292,21 +303,24 @@ class RatedPost(feedlib.RatedPost):
         
     def save(self):
         if self._exists_in_db:
-            update("""update rated_posts set points = %s, last_recalc = now()
+            update("""update rated_posts set points = %s, last_recalc = now(),
+                                             prob = %s
                       where username = %s and post = %s""",
-                   (self._points, self._user.get_username(),
+                   (self._points, self._prob, self._user.get_username(),
                     int(self._post.get_local_id())))
         else:
-            update("insert into rated_posts values (%s, %s, %s, %s, now())",
+            update("insert into rated_posts values (%s, %s, %s, %s, now(), %s)",
                    (self._user.get_username(),
                     int(self._post.get_local_id()),
                     int(self.get_subscription().get_feed().get_local_id()),
-                    self._points))
+                    self._points, self._prob))
             self._exists_in_db = True
         conn.commit()
 
     def age(self):
-        pass # FIXME: need to store probability for this to work
+        self._points = feedlib.calculate_points(self.get_overall_probability(),
+                                                self._post.get_date())
+        self.save()
 
 # ----- WORD DATABASE
 
@@ -351,15 +365,15 @@ class User(feedlib.User):
         # FIXME: sort by score
         cur.execute("""
           select id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
-                 last_error
+                 last_error, max_posts
           from feeds
           join subscriptions on id = feed
           where username = %s
         """, (self._username, ))
         return [Feed(id, title, xmlurl, htmlurl, error, time_to_wait,
-                     last_read, last_error)
+                     last_read, last_error, maxposts)
                 for (id, title, xmlurl, htmlurl, error, time_to_wait,
-                     last_read, last_error)
+                     last_read, last_error, maxposts)
                 in cur.fetchall()]
 
     def get_item_count(self):
@@ -383,7 +397,7 @@ class User(feedlib.User):
 
     def get_rated_post_by_id(self, itemid):
         item = feeddb.get_item_by_id(itemid)
-        sub = Subscription(item.get_site(), self._user)
+        sub = Subscription(item.get_site(), self)
         return RatedPost(self, item, sub)
 
     def get_vote_stats(self):

@@ -1,7 +1,7 @@
 
 import threading, time, atexit, traceback
 import sysv_ipc
-import rsslib
+import rsslib, feedlib
 # importing dbimpl further down
 
 # ----- RECEIVING MESSAGE QUEUE
@@ -31,6 +31,7 @@ def queue_worker():
         tokens = msg.split()
         key = tokens[0]
 
+        print msg
         start = time.time()
         apply(msg_dict[key].invoke, tokens[1 : ])
         print "  time: ", (time.time() - start)
@@ -40,7 +41,6 @@ def queue_worker():
 class FindFeedsToCheck:
 
     def invoke(self):
-        print "Find feeds to check"
         dbimpl.cur.execute("""
         select id from feeds
           where
@@ -53,7 +53,6 @@ class FindFeedsToCheck:
 class AgePosts:
 
     def invoke(self):
-        print "AgePosts"
         dbimpl.cur.execute("select feed, username from subscriptions")
         for row in dbimpl.cur.fetchall():
             dbimpl.mqueue.send("AgeSubscription %s %s" % row)
@@ -61,7 +60,6 @@ class AgePosts:
 class AgeSubscription:
 
     def invoke(self, feedid, username):
-        print "AgeSubscription"
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         user = dbimpl.User(username)
         sub = dbimpl.Subscription(feed, user)
@@ -71,13 +69,24 @@ class AgeSubscription:
 class PurgePosts:
 
     def invoke(self):
-        print "Purge posts" # FIXME: do it
+        for feedid in dbimpl.query_for_list("select id from feeds", ()):
+            dbimpl.mqueue.send("PurgeFeed %s" % feedid)
+
+class PurgeFeed:
+
+    def invoke(self, feedid):
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
+        if not feed.get_max_posts():
+            return
+
+        items = feed.get_items()
+        for ix in range(feed.get_max_posts(), len(items)):
+            items[ix].delete()
 
 class CheckFeed:
 
     def invoke(self, feedid):
         feedid = int(feedid)
-        print "Check feed", feedid
 
         # get feed
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
@@ -111,6 +120,7 @@ class CheckFeed:
         # update feed row
         feed.set_title(site.get_title())
         feed.set_link(site.get_link())
+        feed.set_max_posts(feedlib.compute_max_posts(site))
         feed.is_read_now()
         feed.save()
             
@@ -126,10 +136,9 @@ class RecalculateSubscription:
 
     def invoke(self, feedid, username):
         feedid = int(feedid)
-        print "Recalculate subscription", feedid, username
 
         user = dbimpl.User(username)
-        feed = dbimpl.load_feed(feedid)
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
         sub = dbimpl.Subscription(feed, user)
         
         # load all already rated posts on this subscription 
@@ -161,10 +170,19 @@ class RecalculateSubscription:
             rating.recalculate()
             rating.save()
 
+class RecalculateAllPosts:
+
+    def invoke(self, username):
+        allsubs = dbimpl.query_for_list("""select feed from subscriptions
+                                           where username = %s""",
+                                        (username, ))
+        for feedid in allsubs:
+            dbimpl.mqueue.send("RecalculateSubscription %s %s" %
+                               (feedid, username))
+
 class RemoveDeadFeeds:
 
     def invoke(self):
-        print "RemoveDeadFeeds"
         for feedid in dbimpl.query_for_list("""
              select id from feeds where not exists
                (select * from subscriptions where feed = id)
@@ -249,6 +267,8 @@ msg_dict = {
     "RecalculateSubscription" : RecalculateSubscription(),
     "AgeSubscription" : AgeSubscription(),
     "RemoveDeadFeeds" : RemoveDeadFeeds(),
+    "RecalculateAllPosts" : RecalculateAllPosts(),
+    "PurgeFeed" : PurgeFeed()
     }
 recv_mqueue = ReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup

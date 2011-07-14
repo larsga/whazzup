@@ -7,13 +7,14 @@ create table feeds (
   error varchar(100),
   time_to_wait int not null,
   last_read timestamp,
-  last_error timestamp
+  last_error timestamp,
+  max_posts int
 );
 
 create table posts (
   id serial primary key,
-  title varchar(100) not null,
-  link varchar(200) not null,
+  title varchar(200) not null, -- at what point do we truncate?
+  link varchar(400) not null,
   descr text not null,
   pubdate timestamp not null,
   author varchar(100),
@@ -30,7 +31,8 @@ create table rated_posts (
   post int not null,
   feed int not null,
   points float not null,
-  last_recalc timestamp not null
+  last_recalc timestamp not null,
+  prob float not null
 );
 
 create table read_posts (

@@ -87,6 +87,18 @@ def calculate_points(prob, postdate):
         age = 3600
     return (prob * 1000.0) / math.log(age)
 
+def compute_max_posts(site):
+    "Given an rsslib.Site, computes max number of posts to store."
+    
+    if not site.get_items():
+        return 300
+    
+    oldest = site.get_items()[-1]
+    dt = parse_date(oldest.get_pubdate())
+    delta = time.time() - toseconds(dt)
+    count = len(site.get_items())
+    return int(max(min((count / (delta / 3600)) * 24 * 7 * 8, 300), 30))
+
 # --- Controller
 
 class Controller:
@@ -170,6 +182,12 @@ class Feed:
 
     def get_subscribers(self):
         raise NotImplementedError()
+
+    def get_max_posts(self):
+        raise NotImplementedError()
+
+    def set_max_posts(self, maxposts):
+        raise NotImplementedError()
     
     # shared code
 
@@ -192,21 +210,9 @@ class Post:
     
     def get_description(self):
         raise NotImplementedError()
-
-    def get_date(self):
-        "Returns a datetime object representing the publication date."
-        if not self._date:
-            self._date = parse_date(self.get_pubdate())
-        return self._date
     
     def get_pubdate(self):
         raise NotImplementedError()
-
-    def get_age(self):
-        age = time.time() - toseconds(self.get_date())
-        if age < 0:
-            age = 3600
-        return age
 
     def get_site(self):
         raise NotImplementedError()
@@ -216,8 +222,23 @@ class Post:
 
     def get_author(self):
         raise NotImplementedError()
+
+    def delete(self):
+        raise NotImplementedError()
     
     # shared code
+
+    def get_date(self):
+        "Returns a datetime object representing the publication date."
+        if not self._date:
+            self._date = parse_date(self.get_pubdate())
+        return self._date
+
+    def get_age(self):
+        age = time.time() - toseconds(self.get_date())
+        if age < 0:
+            age = 3600
+        return age
 
     def nice_age(self):
         return nice_time(int(self.get_age()))
@@ -319,11 +340,12 @@ class Subscription:
     
 class RatedPost:
 
-    def __init__(self, user, post, subscription, points = None):
+    def __init__(self, user, post, subscription, points = None, prob = None):
         self._post = post
         self._subscription = subscription
         self._user = user
         self._points = points
+        self._prob = prob
 
     def get_post(self):
         return self._post
@@ -363,10 +385,14 @@ class RatedPost:
             print "ZDE:", self._post.get_title().encode("utf-8"), probs
     
     def get_overall_probability(self):
+        if self._prob is not None:
+            return self._prob
+        
         word_prob = self.get_word_probability()
         site_prob = self.get_site_probability()
         author_prob = self.get_author_probability()
-        return compute_bayes([word_prob, site_prob, author_prob])
+        self._prob = compute_bayes([word_prob, site_prob, author_prob])
+        return self._prob
     
     def get_site_probability(self):
         return self.get_subscription().get_ratio()

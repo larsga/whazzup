@@ -226,13 +226,7 @@ class AppEngineController(feedlib.Controller):
         feed.lastcheck = datetime.datetime.now()
         feed.error = None
         feed.lasterror = None
-        feed.maxposts = 300
-        if site.get_items():
-            oldest = site.get_items()[-1]
-            dt = feedlib.parse_date(oldest.get_pubdate())
-            delta = time.time() - feedlib.toseconds(dt)
-            count = len(site.get_items())
-            feed.maxposts = int(max(min((count / (delta / 3600)) * 24 * 7 * 8, 300), 30))
+        feed.maxposts = feedlib.compute_max_posts(site)
         
         feed.put()
 
