@@ -2,8 +2,6 @@
 # TODO
 
 # - user database
-# - list of popular feeds
-# - OPML import
 # - go through and sort out FIXMEs
 
 import datetime, dbm
@@ -95,11 +93,21 @@ class FeedDatabase(feedlib.Database):
     def get_feed_by_id(self, id):
         cur.execute("select * from feeds where id = %s", (int(id), ))
         return apply(Feed, cur.fetchone())
+
+    def get_popular_feeds(self):
+        cur.execute("""select id, title, last_read, count(username) as subs
+                       from feeds
+                       join subscriptions on id = feed
+                       group by id, title, last_read
+                       order by subs desc""")
+        return [Feed(feedid, title, None, None, None, None, lastread, None,
+                     None, subs)
+                for (feedid, title, lastread, subs) in cur.fetchall()]
     
 class Feed(feedlib.Feed):
 
     def __init__(self, id, title, xmlurl, htmlurl, error, timetowait,
-                 lastread, lasterror, maxposts):
+                 lastread, lasterror, maxposts, subs = None):
         self._id = id
         self._title = title
         self._url = xmlurl
@@ -109,6 +117,7 @@ class Feed(feedlib.Feed):
         self._lasterror = lasterror
         self._time_to_wait = timetowait
         self._maxposts = maxposts
+        self._subs = subs
 
     def get_local_id(self):
         return str(self._id)
@@ -178,12 +187,18 @@ class Feed(feedlib.Feed):
     def get_unread_count(self):
         return "# FIXME" # FIXME
 
+    def get_subscribers(self):
+        return self._subs
+
     def is_being_read(self):
         return "# FIXME" # FIXME
 
     def get_time_to_wait(self):
         "Seconds to wait between each time we poll the feed."
         return self._time_to_wait
+
+    def is_subscribed(self):
+        return False # FIXME
     
 class Item(feedlib.Post):
 
