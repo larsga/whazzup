@@ -30,7 +30,10 @@ def queue_worker():
 
         tokens = msg.split()
         key = tokens[0]
+
+        start = time.time()
         apply(msg_dict[key].invoke, tokens[1 : ])
+        print "  time: ", (time.time() - start)
 
 # ----- RECEIVABLE MESSAGES
 
@@ -50,8 +53,21 @@ class FindFeedsToCheck:
 class AgePosts:
 
     def invoke(self):
-        print "Age posts" # FIXME: do it
+        print "AgePosts"
+        dbimpl.cur.execute("select feed, username from subscriptions")
+        for row in dbimpl.cur.fetchall():
+            dbimpl.mqueue.send("AgeSubscription %s %s" % row)
 
+class AgeSubscription:
+
+    def invoke(self, feedid, username):
+        print "AgeSubscription"
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
+        user = dbimpl.User(username)
+        sub = dbimpl.Subscription(feed, user)
+        for item in sub.get_rated_posts():
+            item.age()
+            
 class PurgePosts:
 
     def invoke(self):
@@ -64,7 +80,7 @@ class CheckFeed:
         print "Check feed", feedid
 
         # get feed
-        feed = dbimpl.load_feed(feedid)
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
         items = {} # url -> item (so we can check for new ones)
         for item in feed.get_items():
             items[item.get_link()] = item
@@ -145,6 +161,17 @@ class RecalculateSubscription:
             rating.recalculate()
             rating.save()
 
+class RemoveDeadFeeds:
+
+    def invoke(self):
+        print "RemoveDeadFeeds"
+        for feedid in dbimpl.query_for_list("""
+             select id from feeds where not exists
+               (select * from subscriptions where feed = id)
+           """, ()):
+            dbimpl.update("delete from feeds where id = %s", (feedid, ))
+        dbimpl.conn.commit()
+            
 # ----- CRON SERVICE
 
 class CronService:
@@ -220,6 +247,8 @@ msg_dict = {
     "PurgePosts" : PurgePosts(),
     "CheckFeed" : CheckFeed(),
     "RecalculateSubscription" : RecalculateSubscription(),
+    "AgeSubscription" : AgeSubscription(),
+    "RemoveDeadFeeds" : RemoveDeadFeeds(),
     }
 recv_mqueue = ReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup

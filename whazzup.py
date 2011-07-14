@@ -102,10 +102,8 @@ class DeleteSite:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
-        feed = feeddb.get_feed_by_id(id)
-        feeddb.remove_feed(feed)
-        feeddb.save()
+
+        controller.unsubscribe(id, user)
         
         return "<p>Deleted.</p>"
         

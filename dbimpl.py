@@ -1,4 +1,14 @@
 
+# TODO
+
+# - aging of posts
+# - purge posts
+# - set limit for number of posts
+# - user database
+# - list of popular feeds
+# - OPML import
+# - go through and sort out FIXMEs
+
 import datetime, dbm
 import psycopg2, sysv_ipc
 import psycopg2.extensions
@@ -59,6 +69,10 @@ class Controller(feedlib.Controller):
             mqueue.send("RecalculateSubscription %s %s" %
                         (feedid, user.get_username()))
 
+    def unsubscribe(self, feedid, user):
+        sub = user.get_subscription(feedid)
+        sub.unsubscribe()
+
 class FeedDatabase(feedlib.Database):
 
     def add_feed(self, url):
@@ -83,11 +97,12 @@ class FeedDatabase(feedlib.Database):
         if not row:
             return None
         (id, title, link, descr, date, author, feedid) = row
-        return Item(id, title, link, descr, date, author, load_feed(feedid))
+        return Item(id, title, link, descr, date, author,
+                    self.get_feed_by_id(feedid))
     
-def load_feed(id): # FIXME: obviously belongs in feed db
-    cur.execute("select * from feeds where id = %s", (id, ))
-    return apply(Feed, cur.fetchone())
+    def get_feed_by_id(self, id):
+        cur.execute("select * from feeds where id = %s", (int(id), ))
+        return apply(Feed, cur.fetchone())
     
 class Feed(feedlib.Feed):
 
@@ -100,6 +115,7 @@ class Feed(feedlib.Feed):
         self._lastread = lastread
         self._error = error
         self._lasterror = lasterror
+        self._time_to_wait = timetowait
 
     def get_local_id(self):
         return str(self._id)
@@ -165,6 +181,10 @@ class Feed(feedlib.Feed):
 
     def is_being_read(self):
         return "# FIXME" # FIXME
+
+    def get_time_to_wait(self):
+        "Seconds to wait between each time we poll the feed."
+        return self._time_to_wait
     
 class Item(feedlib.Post):
 
@@ -215,6 +235,9 @@ class Item(feedlib.Post):
               self._author, self._feed.get_local_id()))
         conn.commit()
 
+    def is_seen(self):
+        return False # FIXME
+
 class Subscription(feedlib.Subscription):
 
     def __init__(self, feed, user):
@@ -224,12 +247,28 @@ class Subscription(feedlib.Subscription):
     def get_feed(self):
         return self._feed
 
+    def get_rated_posts(self):
+        cur.execute("""select post, points from rated_posts
+                    where username = %s and feed = %s""",
+                    (self._user.get_username(), int(self._feed.get_local_id())))
+        return [RatedPost(self._user,
+                          feeddb.get_item_by_id(postid),
+                          self, points) for (postid, points) in cur.fetchall()]
+    
     def get_user(self):
         return self._user
 
     def get_ratio(self):
         return 0.5 # FIXME
-        
+
+    def unsubscribe(self):
+        key = (self._user.get_username(), int(self._feed.get_local_id()))
+
+        update("delete from read_posts where username = %s and feed = %s", key)
+        update("delete from rated_posts where username = %s and feed = %s", key)
+        update("delete from subscriptions where username = %s and feed = %s", key)
+        conn.commit()
+
 class RatedPost(feedlib.RatedPost):
 
     def __init__(self, user, post, subscription, points = None):
@@ -265,6 +304,9 @@ class RatedPost(feedlib.RatedPost):
                     self._points))
             self._exists_in_db = True
         conn.commit()
+
+    def age(self):
+        pass # FIXME: need to store probability for this to work
 
 # ----- WORD DATABASE
 
@@ -334,13 +376,14 @@ class User(feedlib.User):
           where username = %s
           order by points desc limit %s offset %s
         """, (self._username, (high - low), low))
-        return [Item(id, title, link, descr, date, author, load_feed(feed)) for
+        return [Item(id, title, link, descr, date, author,
+                     feeddb.get_feed_by_id(feed)) for
                 (id, title, link, descr, date, author, feed) in
                 cur.fetchall()]
 
     def get_rated_post_by_id(self, itemid):
         item = feeddb.get_item_by_id(itemid)
-        sub = Subscription(item.get_site(), self._username)
+        sub = Subscription(item.get_site(), self._user)
         return RatedPost(self, item, sub)
 
     def get_vote_stats(self):
@@ -373,7 +416,11 @@ class User(feedlib.User):
         if not query_for_value("""select * from subscriptions where
                             feed = %s and username = %s""", key):
             update("insert into subscriptions values (%s, %s)", key)
-    
+
+    def get_subscription(self, feedid):
+        feed = feeddb.get_feed_by_id(feedid)
+        return Subscription(feed, self)
+            
 # ----- SENDING MESSAGE QUEUE
 
 class SendingMessageQueue:

@@ -39,4 +39,3 @@ create table read_posts (
   feed int not null,
   PRIMARY KEY (username, post)
 );
-

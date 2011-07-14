@@ -107,15 +107,21 @@ class Controller:
     def recalculate_all_posts(self, user):
         raise NotImplementedError()
 
+    def unsubscribe(self, feedid, user):
+        raise NotImplementedError()
+
 # --- Model
 
 class Database:
 
     def add_feed(self, url):
         raise NotImplementedError()
+
+    def get_feed_by_id(self, id):
+        raise NotImplementedError()
     
     def get_item_by_id(self, id):
-        raise NotImplementedError() # do we need this? should it stay?
+        raise NotImplementedError()
     
 class Feed:
 
@@ -275,6 +281,9 @@ class User:
     def commit(self):
         raise NotImplementedError()
 
+    def get_subscription(self, feedid):
+        raise NotImplementedError()
+    
     def subscribe(self, feed):
         raise NotImplementedError()
 
@@ -300,6 +309,12 @@ class Subscription:
         raise NotImplementedError()
 
     def get_ratio(self):
+        raise NotImplementedError()
+
+    def unsubscribe(self):
+        raise NotImplementedError()
+
+    def get_rated_posts(self):
         raise NotImplementedError()
     
 class RatedPost:
@@ -397,6 +412,9 @@ class RatedPost:
                 ratio = self._user.get_word_ratio(word)
                 probs.append("%s : %s" % (escape(word), ratio))
         return ", ".join(probs)
+
+    def age(self):
+        raise NotImplementedError()
         
 # --- Word database
 
