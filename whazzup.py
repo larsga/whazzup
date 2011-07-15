@@ -21,6 +21,10 @@ urls = (
     '/recalc', 'Recalculate',
     '/uploadopml', 'ImportOPML',
     '/popular', 'PopularSites',
+    '/login,?(failed|created|missing|passwords)?', 'Login',
+    '/login-handler', 'LoginHandler',
+    '/logout', 'Logout',
+    '/signup', 'Signup',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -55,7 +59,8 @@ class List:
 
         user = users.get_current_user()
         if not user:
-            return render.not_logged_in(users.create_login_url("/"))
+            web.seeother("login")
+            return
             
         low = page * 25
         high = low + 25
@@ -195,9 +200,57 @@ class AddFeed:
         url = string.strip(web.input().get("url"))
         controller.add_feed(url, user)
 
-        # FIXME: this should be a bit prettier, don't you think?
-        return "<p>Feed added to queue for processing.</p>"
+        web.seeother("/sites")
 
+class Login:
+    def GET(self, msg = None):
+        nocache()
+
+        user = users.get_current_user()
+        if user:
+            web.seeother("/")
+        
+        return render.login(users, msg)
+
+class LoginHandler:
+    def POST(self):
+        nocache()
+
+        username = web.input()["username"]
+        password = web.input()["password"]
+
+        if users.verify_credentials(username, password):
+            session.username = username
+            web.seeother("/")
+        else:
+            web.seeother("/login,failed")
+
+class Signup:
+    def POST(self):
+        nocache()
+
+        username = web.input()["username"]
+        password1 = web.input()["password"]
+        password2 = web.input()["password2"]
+        email = web.input()["email"]
+
+        if not (username or password1 or password2 or email):
+            web.seeother("/login,missing")
+            return
+
+        if password1 != password2:
+            web.seeother("/login,passwords")
+            return
+
+        users.create_user(username, password1, email)
+        web.seeother("/login,created")
+
+class Logout:
+    def GET(self):
+        nocache()
+        session.username = None
+        web.seeother("/")
+            
 class AddFave:
     def POST(self):        
         title = string.strip(web.input().get("title") or "").decode("utf-8")
@@ -347,7 +400,8 @@ class DeleteUser:
 
     def POST(self, key):
         controller.delete_user(key)
-        
+
+web.config.debug = False
 web.webapi.internalerror = web.debugerror
 
 try:
@@ -369,6 +423,8 @@ feeddb = module.feeddb
 
 if __name__ == "__main__":
     app = web.application(urls, globals())
+    session = web.session.Session(app, web.session.DiskStore('sessions'))
+    users.set_session(session)
     if controller.in_appengine():
         app.cgirun()
     else:

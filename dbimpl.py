@@ -1,15 +1,25 @@
 
 # TODO
 
-# - user database
+# - user database/login/signup/signout/ceiling
+#   - how to encrypt password?
+#   - add logout link at top
 # - go through and sort out FIXMEs
+# - extensive test
+#   - weeding out of nits etc
+# - deploy
 
-import datetime, dbm
+import datetime, dbm, hashlib
 import psycopg2, sysv_ipc
 import psycopg2.extensions
 import feedlib
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
+
+# ----- CONSTANTS
+
+ACCOUNT_LIMIT = 10
+QUEUE_NUMBER = 6323
 
 # ----- UTILITIES
 
@@ -363,7 +373,33 @@ class WordDatabase(feedlib.WordDatabase):
 class UserDatabase:
 
     def get_current_user(self):
-        return User("larsga") # FIXME
+        # FIXME: here we need to look at how web.py handles cookies & session
+        if hasattr(self._session, "username") and self._session.username:
+            return User(self._session.username)
+        else:
+            return None
+
+    def create_login_url(self, path):
+        return "/login"
+
+    def accounts_available(self):
+        accounts = query_for_value("select count(*) from users", ())
+        return accounts < ACCOUNT_LIMIT
+
+    def set_session(self, session):
+        self._session = session
+
+    def verify_credentials(self, username, password):
+        passhash = hashlib.md5(password).hexdigest()
+        return query_for_value("""select username from users where
+                                    username = %s and password = %s""",
+                               (username, passhash))
+
+    def create_user(self, username, password, email):
+        passhash = hashlib.md5(password).hexdigest()
+        update("insert into users values (%s, %s, %s)",
+               (username, passhash, email))
+        conn.commit()
 
 # ----- USER OBJECT
 
@@ -456,7 +492,7 @@ class SendingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it does not already exist
-        self._mqueue = sysv_ipc.MessageQueue(7321)
+        self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER)
 
     def send(self, msg):
         # FIXME: we may have to queue messages here internally,
@@ -478,3 +514,4 @@ feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 conn = psycopg2.connect("dbname=whazzup")
 cur = conn.cursor()
 mqueue = SendingMessageQueue()
+

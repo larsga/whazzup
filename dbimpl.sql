@@ -41,3 +41,9 @@ create table read_posts (
   feed int not null,
   PRIMARY KEY (username, post)
 );
+
+create table users (
+  username varchar(20) not null primary key,
+  password varchar(32) not null,
+  email varchar(100) not null
+);

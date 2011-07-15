@@ -4,13 +4,15 @@ import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
 
+QUEUE_NUMBER = 6323
+
 # ----- RECEIVING MESSAGE QUEUE
 
 class ReceivingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it already exists
-        self._mqueue = sysv_ipc.MessageQueue(7321, sysv_ipc.IPC_CREX)
+        self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER, sysv_ipc.IPC_CREX)
 
     def get_next_message(self):
         try:
@@ -272,7 +274,7 @@ msg_dict = {
     }
 recv_mqueue = ReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
-import dbimpl # this creates the sending message queue in this process
+import dbimpl # creates the sending message queue in this process
 
 # ----- SET UP CRON
         
