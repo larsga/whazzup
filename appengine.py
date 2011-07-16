@@ -40,6 +40,9 @@ class AppEngineController(feedlib.Controller):
     def in_appengine(self):
         return True
 
+    def is_single_user(self):
+        return False
+
     def add_feed(self, url):
         # first check if the feed is in the database at all
         result = db.GqlQuery("""

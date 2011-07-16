@@ -1,4 +1,4 @@
-$def with (feeds)
+$def with (feeds, user)
 
 <link rel=stylesheet type="text/css" href="static/style.css">
 
@@ -25,7 +25,7 @@ $for site in feeds:
     $ id = site.get_local_id()
     <tr>
     <td>
-    $if not site.is_subscribed():
+    $if not site.is_subscribed(user):
         <form method=post action="/addfeed">
         <input type=hidden name=url value="$(site.get_url())">
         <input type=image src="/static/star.png" border="0">

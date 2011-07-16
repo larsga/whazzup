@@ -82,7 +82,10 @@ class SiteReport:
             return render.not_logged_in(users.create_login_url("/"))
         
         feed = feeddb.get_feed_by_id(id)
-        return render.sitereport(feed, controller.in_appengine())
+        return render.sitereport(feed,
+                                 controller.in_appengine(),
+                                 controller.is_single_user(),
+                                 user)
             
 class UpdateSite:
     def POST(self, id):
@@ -109,8 +112,7 @@ class DeleteSite:
             return render.not_logged_in(users.create_login_url("/"))
 
         controller.unsubscribe(id, user)
-        
-        return "<p>Deleted.</p>"
+        web.seeother("/sites")
         
 class Sites:
     def GET(self):
@@ -120,7 +122,9 @@ class Sites:
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
         
-        return render.sites(user.get_feeds(), controller.in_appengine())
+        return render.sites(user.get_feeds(),
+                            controller.in_appengine(),
+                            controller.is_single_user())
 
 class PopularSites:
     def GET(self):
@@ -131,7 +135,7 @@ class PopularSites:
             return render.not_logged_in(users.create_login_url("/"))
         
         feeds = feeddb.get_popular_feeds()
-        return render.popular(feeds)
+        return render.popular(feeds, user)
     
 class Vote:
     def GET(self, vote, id):
@@ -163,7 +167,8 @@ class ShowItem:
         try:
             rated = user.get_rated_post_by_id(id)
             return render.item(rated, rated.get_post(), string, math, user,
-                               controller.in_appengine())
+                               controller.in_appengine(),
+                               controller.is_single_user())
         except KeyError, e:
             return "No such item: " + repr(id)
         

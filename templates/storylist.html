@@ -24,13 +24,17 @@ $if not items and low == 0:
 $ ix = low
 $for item in items:
     <tr><td>$(ix + 1).
-    <td><a href="/vote/up/$(item.get_local_id())"><img src=static/up.png border=0></a>
-    <td><a href="/faveform/$(item.get_local_id())"><img src=static/star.png border=0></a>
+    <td><a href="/vote/up/$(item.get_local_id())" title="Vote up"
+           ><img src=static/up.png border=0></a>
+    <td><a href="/faveform/$(item.get_local_id())" title="Not in use"
+           ><img src=static/star.png border=0></a>
     <td><a href="$(item.get_link())">$(item.get_title())</a>
 
     <tr><td>
-    <td><a href="/vote/down/$(item.get_local_id())"><img src=static/down.png border=0></a>
-    <td><a href="/vote/read/$(item.get_local_id())"><img src=static/read.png border=0></a>
+    <td><a href="/vote/down/$(item.get_local_id())" title="Vote down"
+           ><img src=static/down.png border=0></a>
+    <td><a href="/vote/read/$(item.get_local_id())" title="Mark as read"
+           ><img src=static/read.png border=0></a>
     <td style="font-size: 75%%; color: gray">
     $(item.get_site().get_title())
     $if item.get_author():

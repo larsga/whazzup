@@ -13,12 +13,25 @@ class ReceivingMessageQueue:
     def __init__(self):
         # create queue, and fail if it already exists
         self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER, sysv_ipc.IPC_CREX)
+        self._queue = []
 
     def get_next_message(self):
         try:
-            return self._mqueue.receive(False)[0] # discard type
+            msg = self._mqueue.receive(False)[0] # discard type
+            while msg:
+                self._queue.append(msg)
+                msg = self._mqueue.receive(False)[0]
         except sysv_ipc.BusyError:
-            return None # no message available
+            pass
+        
+        if self._queue:
+            if len(self._queue) > 1:
+                print "QUEUE:" , self._queue
+            msg = self._queue[0]
+            self._queue = self._queue[1 : ]
+            return msg
+        else:
+            return None
 
     def remove(self):
         self._mqueue.remove()
@@ -27,7 +40,7 @@ def queue_worker():
     while not stop:
         msg = recv_mqueue.get_next_message()
         if not msg:
-            time.sleep(1)
+            time.sleep(0.01)
             continue
 
         tokens = msg.split()

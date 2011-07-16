@@ -1,10 +1,6 @@
 
 # TODO
 
-# - user database/login/signup/signout/ceiling
-#   - how to encrypt password?
-#   - add logout link at top
-# - go through and sort out FIXMEs
 # - extensive test
 #   - weeding out of nits etc
 # - deploy
@@ -49,11 +45,15 @@ def query_for_list(query, args):
 
 class Controller(feedlib.Controller):
 
+    def is_single_user(self):
+        return False
+    
     def vote_received(self, user, id, vote):
         link = user.get_rated_post_by_id(id)
         link.seen()
-        if vote != "read":
+        if vote != "read":            
             link.record_vote(vote)
+            link.get_subscription().record_vote(vote)
             self.recalculate_all_posts(user) # since scores have changed
     
     def add_feed(self, url, user):
@@ -109,7 +109,7 @@ class FeedDatabase(feedlib.Database):
                        from feeds
                        join subscriptions on id = feed
                        group by id, title, last_read
-                       order by subs desc""")
+                       order by subs desc limit 50""")
         return [Feed(feedid, title, None, None, None, None, lastread, None,
                      None, subs)
                 for (feedid, title, lastread, subs) in cur.fetchall()]
@@ -179,10 +179,10 @@ class Feed(feedlib.Feed):
 
     def save(self):
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
-                                   last_error = %s, max_posts = %s
+                                   error = %s, last_error = %s, max_posts = %s
                   where id = %s""",
-               (self._title, self._link, self._lastread, self._lasterror,
-                self._maxposts, self._id))
+               (self._title, self._link, self._lastread, self._error,
+                self._lasterror, self._maxposts, self._id))
         conn.commit()
 
     def get_max_posts(self):
@@ -191,24 +191,17 @@ class Feed(feedlib.Feed):
     def set_max_posts(self, maxposts):
         self._maxposts = maxposts
 
-    def get_ratio(self):
-        return "# FIXME" # FIXME
-
-    def get_unread_count(self):
-        return "# FIXME" # FIXME
-
     def get_subscribers(self):
         return self._subs
-
-    def is_being_read(self):
-        return "# FIXME" # FIXME
 
     def get_time_to_wait(self):
         "Seconds to wait between each time we poll the feed."
         return self._time_to_wait
 
-    def is_subscribed(self):
-        return False # FIXME
+    def is_subscribed(self, user):
+        return query_for_value("""select username from subscriptions
+                                  where username = %s and feed = %s""",
+                               (user.get_username(), self._id))
     
 class Item(feedlib.Post):
 
@@ -254,11 +247,11 @@ class Item(feedlib.Post):
             raise NotImplementedError()
 
         if len(self._title) > 200:
-            print "Title:", len(self._title)
+            self._title = self._title[ : 200]
         if len(self._link) > 400:
             print "Link:", len(self._link)
         if self._author and len(self._author) > 100:
-            print "Author:", len(self._author)
+            self._author = self._author[ : 100]
         
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s)
@@ -266,20 +259,24 @@ class Item(feedlib.Post):
               self._author, self._feed.get_local_id()))
         conn.commit()
 
-    def is_seen(self):
-        return False # FIXME
-
     def delete(self):
         update("delete from read_posts where post = %s", self._id)
         update("delete from rated_posts where post = %s", self._id)
         update("delete from posts where id = %s", self._id)
         conn.commit()
 
+    def is_seen(self, user):
+        return query_for_value("""select post from read_posts
+                                  where username = %s and post = %s""",
+                               (user.get_username(), self._id))
+
 class Subscription(feedlib.Subscription):
 
-    def __init__(self, feed, user):
+    def __init__(self, feed, user, up = 0, down = 0):
         self._feed = feed
         self._user = user
+        self._up = up
+        self._down = down
     
     def get_feed(self):
         return self._feed
@@ -296,7 +293,11 @@ class Subscription(feedlib.Subscription):
         return self._user
 
     def get_ratio(self):
-        return 0.5 # FIXME
+        if self._up + self._down:
+            print self._up, self._down, self._up + 5 / float(self._up + self._down + 5)
+            return (self._up + 5) / float(self._up + self._down + 10)
+        else:
+            return 0.5
 
     def unsubscribe(self):
         key = (self._user.get_username(), int(self._feed.get_local_id()))
@@ -306,14 +307,23 @@ class Subscription(feedlib.Subscription):
         update("delete from subscriptions where username = %s and feed = %s", key)
         conn.commit()
 
+    def record_vote(self, vote):
+        if vote == "up":
+            self._up += 1
+        else:
+            self._down += 1
+
+        update("""update subscriptions set up = %s, down = %s
+                  where username = %s and feed = %s""",
+               (self._up, self._down, self._user.get_username(),
+                int(self._feed.get_local_id())))
+        conn.commit()
+
 class RatedPost(feedlib.RatedPost):
 
     def __init__(self, user, post, subscription, points = None, prob = None):
         feedlib.RatedPost.__init__(self, user, post, subscription, points, prob)
         self._exists_in_db = (points is not None) # FIXME: dubious
-
-    def is_seen(self):
-        return False # FIXME
         
     def seen(self):
         # first remove the rating
@@ -413,19 +423,23 @@ class User(feedlib.User):
         return self._username
 
     def get_feeds(self):
-        # FIXME: sort by score
         cur.execute("""
           select id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
-                 last_error, max_posts
+                 last_error, max_posts, up, down
           from feeds
           join subscriptions on id = feed
           where username = %s
         """, (self._username, ))
-        return [Feed(id, title, xmlurl, htmlurl, error, time_to_wait,
-                     last_read, last_error, maxposts)
+        subs = [Subscription(Feed(id, title, xmlurl, htmlurl, error,
+                                  time_to_wait, last_read, last_error,
+                                  maxposts),
+                             self, up, down)
                 for (id, title, xmlurl, htmlurl, error, time_to_wait,
-                     last_read, last_error, maxposts)
+                     last_read, last_error, maxposts, up, down)
                 in cur.fetchall()]
+        feedlib.sort(subs, Subscription.get_ratio)
+        subs.reverse()
+        return subs
 
     def get_item_count(self):
         return query_for_value("""
@@ -453,9 +467,6 @@ class User(feedlib.User):
 
     def get_vote_stats(self):
         return (0, 0) # FIXME
-
-    def get_no_of_item(self, item):
-        return 0 # FIXME
     
     def _get_word_db(self):
         if not self._worddb:
@@ -493,13 +504,30 @@ class SendingMessageQueue:
     def __init__(self):
         # create queue, and fail if it does not already exist
         self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER)
+        # internal queue for holding messages which can't be sent because
+        # the message queue was full
+        self._internal_queue = []
 
     def send(self, msg):
-        # FIXME: we may have to queue messages here internally,
-        # because the queue size is so absurdly small. we have 2k on
-        # MacOS and 16k on Linux. not sure if this is going to be
-        # enough.
-        self._mqueue.send(msg)
+        if self._internal_queue:
+            pos = 0
+            for oldmsg in self._internal_queue:
+                try:
+                    print "Sending from internal queue", repr(msg)
+                    self._mqueue.send(oldmsg, False)
+                    pos += 1
+                except sysv_ipc.BusyError:
+                    print "Ooops, busy"
+                    break
+
+            self._internal_queue = self._internal_queue[pos : ]
+            print "Truncated queue", self._internal_queue
+        
+        try:
+            self._mqueue.send(msg, False)
+        except sysv_ipc.BusyError:
+            print "Queue full, holding message", repr(msg)
+            self._internal_queue.append(msg)
 
     def remove(self):
         self._mqueue.remove()
@@ -514,4 +542,3 @@ feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 conn = psycopg2.connect("dbname=whazzup")
 cur = conn.cursor()
 mqueue = SendingMessageQueue()
-

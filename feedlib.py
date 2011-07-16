@@ -113,6 +113,9 @@ class Controller:
     def in_appengine(self):
         return False
 
+    def is_single_user(self):
+        return True
+
     def get_queue_delay(self):
         return 0
 
@@ -168,16 +171,13 @@ class Feed:
     def get_item_count(self):
         raise NotImplementedError()
 
-    def get_ratio(self):
-        raise NotImplementedError()
-
     def get_items(self):
         raise NotImplementedError()
             
     def is_being_read(self):
         raise NotImplementedError()
 
-    def is_subscribed(self):
+    def is_subscribed(self, user):
         raise NotImplementedError()
 
     def get_subscribers(self):
@@ -224,6 +224,10 @@ class Post:
         raise NotImplementedError()
 
     def delete(self):
+        raise NotImplementedError()
+
+    def is_seen(self, user):
+        "Returns true iff the link has been seen by the user."
         raise NotImplementedError()
     
     # shared code
@@ -332,10 +336,17 @@ class Subscription:
     def get_ratio(self):
         raise NotImplementedError()
 
+    def get_nice_ratio(self):
+        "Return ratio as nicely formatted string."
+        return str(self.get_ratio())[ : 4]
+
     def unsubscribe(self):
         raise NotImplementedError()
 
     def get_rated_posts(self):
+        raise NotImplementedError()
+
+    def record_vote(self, vote):
         raise NotImplementedError()
     
 class RatedPost:
@@ -358,15 +369,14 @@ class RatedPost:
             self.recalculate()
         return self._points
 
+    def get_stored_points(self):
+        return self._points
+
     def set_points(self, points):
         self._points = points
 
     def seen(self):
         "Marks the link as seen."
-        raise NotImplementedError()
-
-    def is_seen(self):
-        "Returns true iff the link has been seen."
         raise NotImplementedError()
     
     def get_word_probability(self):

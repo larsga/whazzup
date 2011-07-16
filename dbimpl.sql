@@ -23,7 +23,10 @@ create table posts (
 
 create table subscriptions (
   feed int not null,
-  username varchar(20) not null
+  username varchar(20) not null,
+  up int not null default 0,
+  down int not null default 0,
+  PRIMARY KEY (feed, username)
 );
 
 create table rated_posts (
