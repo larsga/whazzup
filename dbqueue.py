@@ -112,6 +112,7 @@ class CheckFeed:
         # read xml
         try:
             site = rsslib.read_feed(feed.get_url())
+            feed.set_error(None)
         except Exception, e:
             # we failed, so record the failure and move on
             traceback.print_exc()

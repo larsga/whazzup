@@ -166,7 +166,8 @@ class Feed(feedlib.Feed):
     
     def set_error(self, msg):
         self._error = msg
-        self._lasterror = datetime.datetime.now()
+        if msg:
+            self._lasterror = datetime.datetime.now()
 
     def set_title(self, title):
         self._title = title

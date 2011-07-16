@@ -451,6 +451,10 @@ class RatedPost:
 
     def age(self):
         raise NotImplementedError()
+    
+    def is_seen(self):
+        "Returns true iff the link has been seen by the user."
+        return self._post.is_seen(self._user)
         
 # --- Word database
 
