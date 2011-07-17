@@ -130,7 +130,7 @@ class CheckFeed:
             newposts = True
             itemobj = dbimpl.Item(None, newitem.get_title(),
                                   newitem.get_link(), newitem.get_description(),
-                                  newitem.get_pubdate(),
+                                  newitem.get_pubdate() or datetime.datetime.now(),
                                   newitem.get_author(), feed)
             itemobj.save()
         
