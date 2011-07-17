@@ -384,7 +384,6 @@ class WordDatabase(feedlib.WordDatabase):
 class UserDatabase:
 
     def get_current_user(self):
-        # FIXME: here we need to look at how web.py handles cookies & session
         if hasattr(self._session, "username") and self._session.username:
             return User(self._session.username)
         else:
@@ -438,7 +437,7 @@ class User(feedlib.User):
                 for (id, title, xmlurl, htmlurl, error, time_to_wait,
                      last_read, last_error, maxposts, up, down)
                 in cur.fetchall()]
-        feedlib.sort(subs, Subscription.get_ratio)
+        subs = feedlib.sort(subs, Subscription.get_ratio)
         subs.reverse()
         return subs
 
