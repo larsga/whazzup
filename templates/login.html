@@ -1,0 +1,60 @@
+$def with (users, msg)
+
+<link rel=stylesheet type="text/css" href="static/style.css">
+
+<title>What's up</title>
+<h1>What's up</h1>
+
+$if msg == "failed":
+    <p style="color: red; font-weight: bold">Login failed. Try again.</p>
+$if msg == "created":
+    <p style="color: red; font-weight: bold">User created. You can
+    log in now.</p>
+<form action="/login-handler" method="post">
+<table>
+<tr><th>Username
+    <td><input name=username>
+<tr><th>Password
+    <td><input name=password type=password>
+<tr><td colspan=2><input type=submit>
+</table>
+</form>
+
+<h2>Forgotten password?</h2>
+
+<p>FIXME: add email new password stuff here 
+
+<h2>Don't have an account?</h2>
+
+$if msg == "passwords":
+    <p style="color: red; font-weight: bold">Passwords did not match.</p>
+$if msg == "missing":
+    <p style="color: red; font-weight: bold">You must fill in all fields.</p>
+
+$if users.accounts_available():
+    <p>Sign up below.
+
+    <form action="/signup" method="post">
+    <table>
+    <tr><th>Username
+        <td><input name=username>
+    <tr><th>Email
+        <td><input name=email>
+           (we promise <em>never</em> to give away your email)
+    <tr><th>Password
+        <td><input name=password type=password>
+    <tr><th>Password
+        <td><input name=password2 type=password>
+    <tr><td colspan=2><input type=submit>
+    </table>
+    </form>
+      
+$else:
+    <p style="width: 50%">Unfortunately, we have all the users we can
+    handle at the moment, and so you cannot sign up for a new account
+    now. We will scale the service up to allow for more users in the
+    near future, so check back in a week or so to try again. Sorry about
+    this.
+      
+    <p style="width: 50%"># FIXME: Allow people to sign up to be
+    notified when new accounts become available.
