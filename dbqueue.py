@@ -25,13 +25,14 @@ class ReceivingMessageQueue:
             pass
         
         if self._queue:
-            if len(self._queue) > 1:
-                print "QUEUE:" , self._queue
             msg = self._queue[0]
             self._queue = self._queue[1 : ]
             return msg
         else:
             return None
+
+    def get_queue_size(self):
+        return len(self._queue)
 
     def remove(self):
         self._mqueue.remove()
@@ -46,7 +47,7 @@ def queue_worker():
         tokens = msg.split()
         key = tokens[0]
 
-        print msg
+        print msg, "(%s)" % recv_mqueue.get_queue_size()
         start = time.time()
         apply(msg_dict[key].invoke, tokens[1 : ])
         print "  time: ", (time.time() - start)
