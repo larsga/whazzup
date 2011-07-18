@@ -2,7 +2,7 @@
 # TODO
 
 # - figure out how to deal with locking issue with dbm
-# - make record_vote send a message to queue
+#   - make record_vote send a message to queue
 # - handle dbqueue crash by reopening queue
 # - up/down scores on Subscriptions not set correctly
 #   (caused by how it's loaded)
@@ -56,12 +56,7 @@ class Controller(feedlib.Controller):
         return False
     
     def vote_received(self, user, id, vote):
-        link = user.get_rated_post_by_id(id)
-        link.seen()
-        if vote != "read":            
-            link.record_vote(vote)
-            link.get_subscription().record_vote(vote)
-            self.recalculate_all_posts(user) # since scores have changed
+        mqueue.send("RecordVote %s %s %s" % (user, id, vote))
     
     def add_feed(self, url, user):
         feed = feeddb.add_feed(url)

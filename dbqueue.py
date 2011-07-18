@@ -206,7 +206,18 @@ class RemoveDeadFeeds:
            """, ()):
             dbimpl.update("delete from feeds where id = %s", (feedid, ))
         dbimpl.conn.commit()
-            
+
+class RecordVote:
+
+    def invoke(self, username, postid, vote):
+        user = User(username)
+        link = user.get_rated_post_by_id(postid)
+        link.seen()
+        if vote != "read":            
+            link.record_vote(vote)
+            link.get_subscription().record_vote(vote)
+            dbimpl.mqueue.send("RecalculateAllPosts")
+        
 # ----- CRON SERVICE
 
 class CronService:
@@ -285,7 +296,8 @@ msg_dict = {
     "AgeSubscription" : AgeSubscription(),
     "RemoveDeadFeeds" : RemoveDeadFeeds(),
     "RecalculateAllPosts" : RecalculateAllPosts(),
-    "PurgeFeed" : PurgeFeed()
+    "PurgeFeed" : PurgeFeed(),
+    "RecordVote" : RecordVote(),
     }
 recv_mqueue = ReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
