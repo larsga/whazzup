@@ -1,8 +1,12 @@
 
 # TODO
 
-# - handle dbqueue crash by reopening queue
 # - figure out how to deal with locking issue with dbm
+# - make record_vote send a message to queue
+# - handle dbqueue crash by reopening queue
+# - up/down scores on Subscriptions not set correctly
+#   (caused by how it's loaded)
+# - commit changes made on server
 
 # - extensive test
 #   - weeding out of nits etc
@@ -366,8 +370,14 @@ class RatedPost(feedlib.RatedPost):
 # FIXME: duplicated from diskimpl.py. should unify somehow.
 class WordDatabase(feedlib.WordDatabase):
 
-    def __init__(self, filename):
-        self._dbm = dbm.open(filename, 'c')
+    def __init__(self, filename, readonly = False):
+        if readonly:
+            # opens the database in readonly mode so that we don't get
+            # conflicts between different processes accessing at the same
+            # time. only the dbqueue can modify the database.
+            self._dbm = dbm.open(filename) 
+        else:
+            self._dbm = dbm.open(filename, 'c')
         feedlib.WordDatabase.__init__(self, self._dbm)
 
     def _get_object(self, key):
@@ -382,7 +392,7 @@ class WordDatabase(feedlib.WordDatabase):
     def close(self):
         self._dbm.close()
         
-# ----- FAKING USER ACCOUNTS
+# ----- USER ACCOUNTS
 
 class UserDatabase:
 
@@ -418,8 +428,9 @@ class UserDatabase:
 
 class User(feedlib.User):
 
-    def __init__(self, username):
+    def __init__(self, username, readonly = False):
         self._username = username
+        self._readonly = readonly # applies to dbm file
         self._worddb = None
 
     def get_username(self):
@@ -473,7 +484,8 @@ class User(feedlib.User):
     
     def _get_word_db(self):
         if not self._worddb:
-            self._worddb = WordDatabase(self._username + ".dbm")
+            self._worddb = WordDatabase(self._username + ".dbm",
+                                        self._readonly)
         return self._worddb
 
     def _get_author_db(self):
