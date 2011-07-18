@@ -1,6 +1,6 @@
 $def with (subs, appengine, singleuser)
 
-<link rel=stylesheet type="text/css" href="static/style.css">
+<link rel=stylesheet type="text/css" href="/static/style.css">
 
 <title>What's up - Sites</title>
 <div class="topmenu">
@@ -34,7 +34,7 @@ $if subs:
             $ klass = "class=error"
         <tr $klass>
         <td><a href="/delete-site/$id" title="Unsubscribe"
-               ><img src=static/read.png border=0></a>
+               ><img src="/static/read.png" border=0></a>
         <td><a href="site/$id">$(site.get_title())</a>
         <td>$(site.get_item_count())
         <td>$(sub.get_nice_ratio())
