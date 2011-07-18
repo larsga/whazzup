@@ -264,9 +264,9 @@ class Item(feedlib.Post):
         conn.commit()
 
     def delete(self):
-        update("delete from read_posts where post = %s", self._id)
-        update("delete from rated_posts where post = %s", self._id)
-        update("delete from posts where id = %s", self._id)
+        update("delete from read_posts where post = %s", (self._id, ))
+        update("delete from rated_posts where post = %s", (self._id, ))
+        update("delete from posts where id = %s", (self._id, ))
         conn.commit()
 
     def is_seen(self, user):
