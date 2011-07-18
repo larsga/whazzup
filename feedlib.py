@@ -56,6 +56,9 @@ def compute_average(probs):
     sum = reduce(operator.add, probs)
     return sum / float(len(probs))
 
+def strptime(str, format):
+    return datetime.datetime(*(time.strptime(str, format)[0:6]))
+
 def parse_date(datestring):
     if datestring:
         formats = [("%a, %d %b %Y %H:%M:%S", 24),
@@ -70,7 +73,7 @@ def parse_date(datestring):
                    ("%a, %d %B %Y %H:%M:%S", 29)]
         for (format, l) in formats:
             try:
-                return datetime.datetime.strptime(datestring[ : l], format)
+                return strptime(datestring[ : l], format)
             except ValueError:
                 pass
 
