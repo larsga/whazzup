@@ -32,6 +32,6 @@ $for site in feeds:
          </form>    
     <td><a href="$(site.get_link())">$(site.get_title())</a>
     <td>$(site.get_subscribers())
-    <td>$(site.get_item_count())
+    <td>$(site.get_max_posts())
     <td>$(site.nice_time_since_last_read())
 </table>
