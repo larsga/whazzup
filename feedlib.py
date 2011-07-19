@@ -14,7 +14,7 @@ def nice_time(secs):
     if secs > 86400:
         return "%s days" % (secs / 86400)
     if secs > 3600:
-        if secs < (3600 * 3):
+        if secs < (3600 * 3) and ((secs % 3600) / 60) > 0:
             return "%s hours %s mins" % (secs / 3600, (secs % 3600) / 60)
         else:
             return "%s hours" % (secs / 3600)

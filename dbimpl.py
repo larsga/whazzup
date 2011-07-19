@@ -1,11 +1,8 @@
 
 # TODO
 
-# - figure out how to deal with locking issue with dbm
-#   - make record_vote send a message to queue
-# - handle dbqueue crash by reopening queue
-# - up/down scores on Subscriptions not set correctly
-#   (caused by how it's loaded)
+# - switch to gdbm so we can have multiple processes access at once
+# - handle dbqueue crash by reopening queue (or something)
 # - commit changes made on server
 
 # - extensive test
