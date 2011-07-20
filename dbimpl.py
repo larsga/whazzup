@@ -103,14 +103,14 @@ class FeedDatabase(feedlib.Database):
         return apply(Feed, cur.fetchone())
 
     def get_popular_feeds(self):
-        cur.execute("""select id, title, xmlurl, htmlurl, last_read, count(username) as subs
+        cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, count(username) as subs
                        from feeds
                        join subscriptions on id = feed
-                       group by id, title, last_read, xmlurl, htmlurl
+                       group by id, title, last_read, xmlurl, htmlurl, max_posts
                        order by subs desc limit 50""")
         return [Feed(feedid, title, xmlurl, htmlurl, None, None, lastread, None,
-                     None, subs)
-                for (feedid, title, xmlurl, htmlurl, lastread, subs)
+                     maxposts, subs)
+                for (feedid, title, xmlurl, htmlurl, lastread, maxposts, subs)
                 in cur.fetchall()]
     
 class Feed(feedlib.Feed):
