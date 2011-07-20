@@ -1,6 +1,9 @@
 
 # TODO
 
+# - implement notify signup
+# - proper description on how it works on initial page if not signed in
+
 # - make gdbm code work locally
 
 # - extensive test
@@ -10,11 +13,17 @@
 
 # - deploy
 
-import datetime, gdbm, hashlib
+import datetime, hashlib
 import psycopg2, sysv_ipc
 import psycopg2.extensions
 import feedlib
 from config import *
+
+try:
+    import gdbm
+except ImportError:
+    import fakegdbm
+    gdbm = fakegdbm
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
@@ -106,6 +115,9 @@ class FeedDatabase(feedlib.Database):
         return apply(Feed, cur.fetchone())
 
     def get_popular_feeds(self):
+        # may consider using sum of ratios for sorting instead of the count
+        # of subscribers
+        # sum((up + 5) / cast((up + down + 10) as float))
         cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, count(username) as subs
                        from feeds
                        join subscriptions on id = feed
@@ -426,6 +438,10 @@ class UserDatabase:
 
     def set_session(self, session):
         self._session = session
+
+    def user_exists(self, username):
+        return query_for_value("""select username from users where
+                                    username = %s""", (username, ))
 
     def verify_credentials(self, username, password):
         passhash = hashlib.md5(password).hexdigest()

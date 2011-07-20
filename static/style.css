@@ -20,3 +20,11 @@ th {
 div.topmenu {
     float: right;
 }
+
+.hidden {
+    display: none
+}
+
+div.visible {
+    display: block;
+}

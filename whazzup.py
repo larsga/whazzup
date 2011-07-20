@@ -29,7 +29,7 @@ urls = (
     '/recalc', 'Recalculate',
     '/uploadopml', 'ImportOPML',
     '/popular', 'PopularSites',
-    '/login,?(failed|created|missing|passwords)?', 'Login',
+    '/login,?(failed|created|missing|passwords|userexists)?', 'Login',
     '/login-handler', 'LoginHandler',
     '/logout', 'Logout',
     '/signup', 'Signup',
@@ -65,8 +65,7 @@ class List:
 
         user = users.get_current_user()
         if not user:
-            web.seeother(web.ctx.homedomain + "/login")
-            return
+            return render.not_logged_in(users.create_login_url("/"))
             
         low = page * 25
         high = low + 25
@@ -85,8 +84,7 @@ class SiteReport:
 
         user = users.get_current_user()
         if not user:
-            web.seeother(web.ctx.homedomain + "login")
-            return
+            return render.not_logged_in(users.create_login_url("/"))
         
         feed = feeddb.get_feed_by_id(id)
         return render.sitereport(feed,
@@ -116,8 +114,7 @@ class DeleteSite:
 
         user = users.get_current_user()
         if not user:
-            web.seeother(web.ctx.homedomain + "/login")
-            return
+            return render.not_logged_in(users.create_login_url("/"))
 
         controller.unsubscribe(id, user)
         web.seeother(web.ctx.homedomain + "/sites")
@@ -128,8 +125,7 @@ class Sites:
 
         user = users.get_current_user()
         if not user:
-            web.seeother(web.ctx.homedomain + "/login")
-            return
+            return render.not_logged_in(users.create_login_url("/"))
         
         return render.sites(user.get_feeds(),
                             controller.in_appengine(),
@@ -141,8 +137,7 @@ class PopularSites:
 
         user = users.get_current_user()
         if not user:
-            web.seeother(web.ctx.homedomain + "/login")
-            return
+            return render.not_logged_in(users.create_login_url("/"))
         
         feeds = feeddb.get_popular_feeds()
         return render.popular(feeds, user)
@@ -226,6 +221,7 @@ class Login:
         user = users.get_current_user()
         if user:
             web.seeother(web.ctx.homedomain + "/")
+            return
         
         return render.login(users, msg)
 
@@ -257,6 +253,10 @@ class Signup:
 
         if password1 != password2:
             web.seeother(web.ctx.homedomain + "/login,passwords")
+            return
+
+        if users.user_exists(username):
+            web.seeother(web.ctx.homedomain + "/login,userexists")
             return
 
         users.create_user(username, password1, email)
