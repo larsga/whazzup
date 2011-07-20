@@ -5,6 +5,9 @@
 
 # - extensive test
 #   - weeding out of nits etc
+
+# - operation to remove users
+
 # - deploy
 
 import datetime, gdbm, hashlib

@@ -311,6 +311,7 @@ cron = CronService()
 cron.add_task(QueueTask("FindFeedsToCheck", 600))
 cron.add_task(QueueTask("AgePosts", 3600))
 cron.add_task(QueueTask("PurgePosts", 86400))
+cron.add_task(QueueTask("RemoveDeadFeeds", 86400))
 start_cron_worker()
 
 # ----- START
