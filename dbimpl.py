@@ -1,10 +1,7 @@
 
 # TODO
 
-# - implement notify signup
 # - proper description on how it works on initial page if not signed in
-
-# - make gdbm code work locally
 
 # - extensive test
 #   - weeding out of nits etc

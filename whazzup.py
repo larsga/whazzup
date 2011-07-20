@@ -29,10 +29,11 @@ urls = (
     '/recalc', 'Recalculate',
     '/uploadopml', 'ImportOPML',
     '/popular', 'PopularSites',
-    '/login,?(failed|created|missing|passwords|userexists)?', 'Login',
+    '/login,?(failed|created|missing|passwords|userexists|notify)?', 'Login',
     '/login-handler', 'LoginHandler',
     '/logout', 'Logout',
     '/signup', 'Signup',
+    '/notify', 'Notify',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -262,6 +263,17 @@ class Signup:
         users.create_user(username, password1, email)
         web.seeother(web.ctx.homedomain + "/login,created")
 
+class Notify:
+    def POST(self):
+        nocache()
+
+        email = web.input()["email"]
+
+        dbimpl.update("insert into notify values (%s)", (email, ))
+        dbimpl.conn.commit()
+        
+        web.seeother(web.ctx.homedomain + "/login,notify")
+        
 class Logout:
     def GET(self):
         nocache()

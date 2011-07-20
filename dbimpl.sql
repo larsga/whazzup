@@ -53,6 +53,10 @@ create table users (
   email varchar(100) not null
 );
 
+create table notify (
+  email varchar(100) not null primary key
+)
+
 -- ORIGINAL QUERY PLAN
 --
 -- Limit  (cost=121.85..121.91 rows=25 width=474)

@@ -39,6 +39,10 @@ $if msg == "failed":
 $if msg == "created":
     <p style="color: red; font-weight: bold">User created. You can
     log in now.</p>
+$if msg == "notify":
+    <p style="color: red; font-weight: bold">We have stored your email
+    address, and will email you when more accounts become available.
+    Thank you!</p>
 <form action="/login-handler" method="post">
 <table>
 <tr><th>Username
@@ -62,7 +66,7 @@ $if msg == "missing":
 $if msg == "userexists":
     <p style="color: red; font-weight: bold">That user already exists.</p>
 
-$if users.accounts_available():
+$if False:
     <p><input type=submit value="Sign up"
               onclick='document.getElementById("signup").className = "visible"'>
     </p>
@@ -90,8 +94,13 @@ $else:
     <p style="width: 50%">Unfortunately, we have all the users we can
     handle at the moment, and so you cannot sign up for a new account
     now. We will scale the service up to allow for more users in the
-    near future, so check back in a week or so to try again. Sorry about
-    this.
+    near future. Sorry about this.
       
-    <p style="width: 50%"># FIXME: Allow people to sign up to be
-    notified when new accounts become available.
+    <p style="width: 50%">Sign up below to be notified when we open up
+    for more users.
+
+      <form action="/notify" method="post">
+        Email: <input name=email><br>
+        <input type=submit>
+      </form>
+      
