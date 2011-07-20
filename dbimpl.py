@@ -109,7 +109,11 @@ class FeedDatabase(feedlib.Database):
     
     def get_feed_by_id(self, id):
         cur.execute("select * from feeds where id = %s", (int(id), ))
-        return apply(Feed, cur.fetchone())
+        row = cur.fetchone()
+        if row:
+            return apply(Feed, row)
+        else:
+            return None
 
     def get_popular_feeds(self):
         # may consider using sum of ratios for sorting instead of the count
@@ -190,6 +194,8 @@ class Feed(feedlib.Feed):
         self._lastread = datetime.datetime.now()
 
     def save(self):
+        if len(self._title) > 100:
+            self._title = self._title[ : 100] # we just truncate
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
                                    error = %s, last_error = %s, max_posts = %s
                   where id = %s""",

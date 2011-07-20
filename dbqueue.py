@@ -107,6 +107,9 @@ class CheckFeed:
 
         # get feed
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
+        if not feed: # might have been gc-ed in the meantime
+            return
+        
         items = {} # url -> item (so we can check for new ones)
         for item in feed.get_items():
             items[item.get_link()] = item
