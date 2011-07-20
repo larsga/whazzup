@@ -1,8 +1,16 @@
 
-import time, string, math, rsslib, sys, feedlib, StringIO
+import time, string, math, sys, StringIO, os
 from xml.sax import SAXException
 
 import web
+
+# mod_wsgi app loading weirdness workaround
+appdir = os.path.dirname(__file__)
+sys.path.append(appdir)
+# </workaround>
+
+import rsslib, feedlib
+from config import *
 
 urls = (
     '/(\d*)', 'List',
@@ -47,8 +55,6 @@ def nocache():
     web.header("Cache-Control", "no-cache, no-store, must-revalidate, post-check=0, pre-check=0");
     web.header("Expires", "Tue, 25 Dec 1973 13:02:00 GMT");
 
-render = web.template.render('templates/')
-
 class List:
     def GET(self, page):
         nocache()
@@ -59,7 +65,7 @@ class List:
 
         user = users.get_current_user()
         if not user:
-            web.seeother("login")
+            web.seeother(web.ctx.homedomain + "/login")
             return
             
         low = page * 25
@@ -79,7 +85,8 @@ class SiteReport:
 
         user = users.get_current_user()
         if not user:
-            return render.not_logged_in(users.create_login_url("/"))
+            web.seeother(web.ctx.homedomain + "login")
+            return
         
         feed = feeddb.get_feed_by_id(id)
         return render.sitereport(feed,
@@ -109,10 +116,11 @@ class DeleteSite:
 
         user = users.get_current_user()
         if not user:
-            return render.not_logged_in(users.create_login_url("/"))
+            web.seeother(web.ctx.homedomain + "/login")
+            return
 
         controller.unsubscribe(id, user)
-        web.seeother("/sites")
+        web.seeother(web.ctx.homedomain + "/sites")
         
 class Sites:
     def GET(self):
@@ -120,7 +128,8 @@ class Sites:
 
         user = users.get_current_user()
         if not user:
-            return render.not_logged_in(users.create_login_url("/"))
+            web.seeother(web.ctx.homedomain + "/login")
+            return
         
         return render.sites(user.get_feeds(),
                             controller.in_appengine(),
@@ -132,7 +141,8 @@ class PopularSites:
 
         user = users.get_current_user()
         if not user:
-            return render.not_logged_in(users.create_login_url("/"))
+            web.seeother(web.ctx.homedomain + "/login")
+            return
         
         feeds = feeddb.get_popular_feeds()
         return render.popular(feeds, user)
@@ -149,12 +159,14 @@ class Vote:
 
         referrer = web.ctx.env.get('HTTP_REFERER')
         if referrer:
-            if referrer.find("/site/") == -1:
-                goto = referrer[referrer.rfind("/") : ]
-            else:
-                goto = referrer
+            goto = referrer
         else:
-            goto = "/"
+            goto = web.ctx.homedomain + "/"
+
+        outf = open("/tmp/web.log", "a")
+        outf.write("%s -> %s\n" % (referrer, goto))
+        outf.close()
+            
         web.seeother(goto)
 
 class ShowItem:
@@ -205,7 +217,7 @@ class AddFeed:
         url = string.strip(web.input().get("url"))
         controller.add_feed(url, user)
 
-        web.seeother("/sites")
+        web.seeother(web.ctx.homedomain + "/sites")
 
 class Login:
     def GET(self, msg = None):
@@ -213,7 +225,7 @@ class Login:
 
         user = users.get_current_user()
         if user:
-            web.seeother("/")
+            web.seeother(web.ctx.homedomain + "/")
         
         return render.login(users, msg)
 
@@ -226,9 +238,9 @@ class LoginHandler:
 
         if users.verify_credentials(username, password):
             session.username = username
-            web.seeother("/")
+            web.seeother(web.ctx.homedomain + "/")
         else:
-            web.seeother("/login,failed")
+            web.seeother(web.ctx.homedomain + "/login,failed")
 
 class Signup:
     def POST(self):
@@ -240,21 +252,21 @@ class Signup:
         email = web.input()["email"]
 
         if not (username or password1 or password2 or email):
-            web.seeother("/login,missing")
+            web.seeother(web.ctx.homedomain + "/login,missing")
             return
 
         if password1 != password2:
-            web.seeother("/login,passwords")
+            web.seeother(web.ctx.homedomain + "/login,passwords")
             return
 
         users.create_user(username, password1, email)
-        web.seeother("/login,created")
+        web.seeother(web.ctx.homedomain + "/login,created")
 
 class Logout:
     def GET(self):
         nocache()
         session.username = None
-        web.seeother("/")
+        web.seeother(web.ctx.homedomain + "/")
             
 class AddFave:
     def POST(self):        
@@ -423,14 +435,27 @@ except ImportError:
     users = dbimpl.users
     module = dbimpl
 
+# --- SETUP
+
+render = web.template.render(os.path.join(appdir, 'templates/'))
+
 controller = module.controller
 feeddb = module.feeddb
 
+web.config.session_parameters['cookie_path'] = '/'
+
+app = web.application(urls, globals(), autoreload = False)
+session = web.session.Session(app, web.session.DiskStore(SESSION_DIR))
+users.set_session(session)
+
 if __name__ == "__main__":
-    app = web.application(urls, globals())
-    session = web.session.Session(app, web.session.DiskStore('sessions'))
-    users.set_session(session)
     if controller.in_appengine():
         app.cgirun()
     else:
         app.run()
+else:
+    #this is for mod_python
+    #main = web.application(urls, globals()).wsgifunc()
+    
+    # this is for mod_wsgi
+    application = app.wsgifunc()

@@ -1,10 +1,10 @@
 
-import threading, time, atexit, traceback
+import threading, time, atexit, traceback, datetime
 import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
 
-QUEUE_NUMBER = 6323
+QUEUE_NUMBER = 6327
 
 # ----- RECEIVING MESSAGE QUEUE
 
@@ -12,7 +12,8 @@ class ReceivingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it already exists
-        self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER, sysv_ipc.IPC_CREX)
+        self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER, sysv_ipc.IPC_CREX,
+                                             0666)
         self._queue = []
 
     def get_next_message(self):
@@ -210,13 +211,13 @@ class RemoveDeadFeeds:
 class RecordVote:
 
     def invoke(self, username, postid, vote):
-        user = User(username)
+        user = dbimpl.User(username)
         link = user.get_rated_post_by_id(postid)
         link.seen()
         if vote != "read":            
             link.record_vote(vote)
             link.get_subscription().record_vote(vote)
-            dbimpl.mqueue.send("RecalculateAllPosts")
+            dbimpl.mqueue.send("RecalculateAllPosts " + username)
         
 # ----- CRON SERVICE
 
@@ -281,9 +282,10 @@ stop = False
 import signal
 def signal_handler(signal, frame):
     global stop
-    print "SIGINT received"
+    print "%s received" % signal
     stop = True
 signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # ------ SET UP MESSAGING
 

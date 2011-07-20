@@ -1,25 +1,25 @@
 
 # TODO
 
-# - switch to gdbm so we can have multiple processes access at once
-# - handle dbqueue crash by reopening queue (or something)
-# - commit changes made on server
+# - handle dbqueue crash by reopening queue
+# - figure out how to deal with locking issue with dbm
 
 # - extensive test
 #   - weeding out of nits etc
 # - deploy
 
-import datetime, dbm, hashlib
+import datetime, gdbm, hashlib
 import psycopg2, sysv_ipc
 import psycopg2.extensions
 import feedlib
+from config import *
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
 # ----- CONSTANTS
 
 ACCOUNT_LIMIT = 10
-QUEUE_NUMBER = 6323
+QUEUE_NUMBER = 6327
 
 # ----- UTILITIES
 
@@ -53,7 +53,7 @@ class Controller(feedlib.Controller):
         return False
     
     def vote_received(self, user, id, vote):
-        mqueue.send("RecordVote %s %s %s" % (user, id, vote))
+        mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote))
     
     def add_feed(self, url, user):
         feed = feeddb.add_feed(url)
@@ -272,7 +272,7 @@ class Item(feedlib.Post):
 
 class Subscription(feedlib.Subscription):
 
-    def __init__(self, feed, user, up = 0, down = 0):
+    def __init__(self, feed, user, up = None, down = None):
         self._feed = feed
         self._user = user
         self._up = up
@@ -293,8 +293,9 @@ class Subscription(feedlib.Subscription):
         return self._user
 
     def get_ratio(self):
+        if self._up is None:
+            self._load_counts()
         if self._up + self._down:
-            print self._up, self._down, self._up + 5 / float(self._up + self._down + 5)
             return (self._up + 5) / float(self._up + self._down + 10)
         else:
             return 0.5
@@ -308,6 +309,9 @@ class Subscription(feedlib.Subscription):
         conn.commit()
 
     def record_vote(self, vote):
+        if self._up is None:
+            self._load_counts()
+
         if vote == "up":
             self._up += 1
         else:
@@ -318,6 +322,13 @@ class Subscription(feedlib.Subscription):
                (self._up, self._down, self._user.get_username(),
                 int(self._feed.get_local_id())))
         conn.commit()
+
+    def _load_counts(self):
+        cur.execute("""select up, down from subscriptions
+                       where username = %s and feed = %s""",
+                    (self._user.get_username(),
+                     int(self._feed.get_local_id())))
+        (self._up, self._down) = cur.fetchone()
 
 class RatedPost(feedlib.RatedPost):
 
@@ -331,9 +342,15 @@ class RatedPost(feedlib.RatedPost):
                (self._user.get_username(), int(self._post.get_local_id())))
 
         # then make a note that we've read it
-        update("insert into read_posts values (%s, %s, %s)",
-               (self._user.get_username(), int(self._post.get_local_id()),
-                int(self._subscription.get_feed().get_local_id())))
+        try:
+            update("insert into read_posts values (%s, %s, %s)",
+                   (self._user.get_username(), int(self._post.get_local_id()),
+                    int(self._subscription.get_feed().get_local_id())))
+        except psycopg2.IntegrityError, e:
+            # most likely the button got pressed twice. we output a warning
+            # and carry on.
+            print str(e)
+
         conn.commit()
         
     def save(self):
@@ -362,20 +379,23 @@ class RatedPost(feedlib.RatedPost):
 # FIXME: duplicated from diskimpl.py. should unify somehow.
 class WordDatabase(feedlib.WordDatabase):
 
-    def __init__(self, filename, readonly = False):
+    def __init__(self, filename, readonly):
         if readonly:
             # opens the database in readonly mode so that we don't get
             # conflicts between different processes accessing at the same
             # time. only the dbqueue can modify the database.
-            self._dbm = dbm.open(filename) 
+            self._dbm = gdbm.open(filename, 'ru')
         else:
-            self._dbm = dbm.open(filename, 'c')
+            self._dbm = gdbm.open(filename, 'cf')
         feedlib.WordDatabase.__init__(self, self._dbm)
 
     def _get_object(self, key):
         key = key.encode("utf-8")
-        (good, bad) = self._words.get(key, "0,0").split(",")
-        return (int(good), int(bad))
+        if self._words.has_key(key):
+            (good, bad) = self._words[key].split(",")
+            return (int(good), int(bad))
+        else:
+            return (0, 0)
 
     def _put_object(self, key, ratio):
         key = key.encode("utf-8")
@@ -384,13 +404,13 @@ class WordDatabase(feedlib.WordDatabase):
     def close(self):
         self._dbm.close()
         
-# ----- USER ACCOUNTS
+# ----- FAKING USER ACCOUNTS
 
 class UserDatabase:
 
     def get_current_user(self):
         if hasattr(self._session, "username") and self._session.username:
-            return User(self._session.username)
+            return User(self._session.username, readonly = True)
         else:
             return None
 
@@ -476,8 +496,7 @@ class User(feedlib.User):
     
     def _get_word_db(self):
         if not self._worddb:
-            self._worddb = WordDatabase(self._username + ".dbm",
-                                        self._readonly)
+            self._worddb = WordDatabase(DBM_DIR + self._username + ".dbm", self._readonly)
         return self._worddb
 
     def _get_author_db(self):
@@ -521,7 +540,7 @@ class SendingMessageQueue:
             for oldmsg in self._internal_queue:
                 try:
                     print "Sending from internal queue", repr(msg)
-                    self._mqueue.send(oldmsg, False)
+                    self._send(oldmsg)
                     pos += 1
                 except sysv_ipc.BusyError:
                     print "Ooops, busy"
@@ -531,10 +550,23 @@ class SendingMessageQueue:
             print "Truncated queue", self._internal_queue
         
         try:
-            self._mqueue.send(msg, False)
+            self._send(msg)
         except sysv_ipc.BusyError:
             print "Queue full, holding message", repr(msg)
             self._internal_queue.append(msg)
+
+    def _send(self, msg):
+        try:
+            self._mqueue.send(msg, False)
+        except sysv_ipc.ExistentialError:
+            # this could be either because dbqueue was restarted (new instance
+            # of queue) or because dbqueue is not running at all. we reopen
+            # the queue and try again once.
+            self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER)
+
+            # we retry. if it still fails we know dbqueue is not running and
+            # there's no point in continuing to try.
+            self._mqueue.send(msg, False)
 
     def remove(self):
         self._mqueue.remove()
@@ -546,6 +578,6 @@ controller = Controller()
 feeddb = FeedDatabase()
 feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 
-conn = psycopg2.connect("dbname=whazzup")
+conn = psycopg2.connect(DB_CONNECT_STRING)
 cur = conn.cursor()
 mqueue = SendingMessageQueue()
