@@ -1,0 +1,60 @@
+$def with (page, low, high, user)
+
+<link rel=stylesheet type="text/css" href="/static/style.css">
+
+<title>What's up</title>
+
+<div class="topmenu">
+  <b>Home</b> |
+  <a href="/sites">Feeds</a> |
+  <a href="/popular">Popular</a> |
+  <a href="/logout">Log out</a>
+</div>
+
+<h1>What's up</h1>
+
+$ items = user.get_item_range(low, high)
+
+$if not items and low == 0:
+    <p>You have no news. Probably this is because you haven't
+    subscribed to any feeds yet. Go to the <a href="/sites">feed list</a>
+    to subscribe to some feeds.
+     
+<table>
+$ ix = low
+$for item in items:
+    <tr><td>$(ix + 1).
+    <td><a href="/vote/up/$(item.get_local_id())" title="Vote up"
+           ><img src=static/up.png border=0></a>
+    <td><a href="/faveform/$(item.get_local_id())" title="Not in use"
+           ><img src=static/star.png border=0></a>
+    <td><a href="$(item.get_link())">$(item.get_title())</a>
+
+    <tr><td>
+    <td><a href="/vote/down/$(item.get_local_id())" title="Vote down"
+           ><img src=static/down.png border=0></a>
+    <td><a href="/vote/read/$(item.get_local_id())" title="Mark as read"
+           ><img src=static/read.png border=0></a>
+    <td style="font-size: 75%%; color: gray">
+    $(item.get_site().get_title())
+    $if item.get_author():
+        , $(item.get_author())
+    <a href="/item/$(item.get_local_id())" style="color: inherit">[*]</a>,
+    $(item.nice_age())
+
+    $ ix += 1
+
+</table>
+
+$if items:
+    <p>
+    $if page:
+        <a href="/$(page - 1)">previous</a>
+    
+    $for ix in range((user.get_item_count() / 25) + 1):
+        $if ix == page:
+            <b>$(ix + 1)</b>
+        $else:
+            <a href="/$ix">$(ix + 1)</a>
+    $if len(items) == 25:
+        <a href="/$(page + 1)">next</a>

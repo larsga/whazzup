@@ -1,0 +1,74 @@
+$def with (subs, appengine, singleuser)
+
+<link rel=stylesheet type="text/css" href="/static/style.css">
+
+<title>What's up - Sites</title>
+<div class="topmenu">
+  <a href="/">Home</a> |
+  <b>Feeds</b> |
+  <a href="/popular">Popular</a> |
+  <a href="/logout">Log out</a>
+</div>
+<h1>Sites</h1>
+
+$if subs:
+    <table>
+    <tr><th>
+        <th>Feed
+    $if singleuser:
+        <th>Posts
+    $else:
+        <th>Max posts
+        <th>Posts
+          
+    <th>Score
+    <th>Last checked
+    $if singleuser:
+        <th>Unread
+        <th>Being read
+      
+    $for sub in subs:
+        $ site = sub.get_feed()
+        $ klass = ""
+        $ id = site.get_local_id()
+        $if site.get_error():
+            $ klass = "class=error"
+        <tr $klass>
+        <td><a href="/delete-site/$id" title="Unsubscribe"
+               ><img src="/static/read.png" border=0></a>
+        <td><a href="site/$id">$(site.get_title())</a>
+        $if not singleuser:
+	    <td>$(site.get_max_posts())
+        <td>$(site.get_item_count())
+        <td>$(sub.get_nice_ratio())
+        <td>$(site.nice_time_since_last_read())
+    $if singleuser:
+        <td>$(site.get_unread_count())
+        <td>$(site.is_being_read())
+    </table>
+$else:
+    <p>You are not subscribed to any feeds yet. Please subscribe to a
+    feed below.
+
+<h3>Select popular feed</h3>
+
+<p>See <a href="/popular">the list of most popular feeds</a>, to find
+a feed you want to subscribe to.
+
+<h3>Subscribe to feed</h3>
+
+<p><b>WARN:</b> This must be the URL of the RSS/Atom
+  feed, <em>not</em> the home page.</p>
+
+<p><form method=post action="/addfeed">
+Feed URL: <input type=text name=url size=50><br>
+<input type=submit value="Add">
+</form>
+
+<h3>Import OPML feed list</h3>
+
+<p><form method=post enctype="multipart/form-data" action="/uploadopml">
+Import OPML feed list: <input type=file name=opml><br>
+<input type=submit value="Upload">
+</form>
+  
