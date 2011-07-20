@@ -23,6 +23,9 @@ def nice_time(secs):
     return "%s seconds" % secs
 
 def html2text(str):
+    # FIXME: maybe this is the cause of some of the HTML showing up here and
+    # there? maybe I'm the one who doesn't process the text correctly? let's
+    # check later on...
     str = string.replace(str, "&lt;", "<")
     str = string.replace(str, "&gt;", ">")
     str = string.replace(str, "&amp;", "&")

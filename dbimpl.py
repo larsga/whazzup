@@ -1,8 +1,7 @@
 
 # TODO
 
-# - handle dbqueue crash by reopening queue
-# - figure out how to deal with locking issue with dbm
+# - make gdbm code work locally
 
 # - extensive test
 #   - weeding out of nits etc
