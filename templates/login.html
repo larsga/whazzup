@@ -49,7 +49,7 @@ $if msg == "notify":
     <td><input name=username>
 <tr><th>Password
     <td><input name=password type=password>
-<tr><td colspan=2><input type=submit>
+<tr><td colspan=2><input type=submit value="Log in">
 </table>
 </form>
 
@@ -66,7 +66,7 @@ $if msg == "missing":
 $if msg == "userexists":
     <p style="color: red; font-weight: bold">That user already exists.</p>
 
-$if False:
+$if users.accounts_available():
     <p><input type=submit value="Sign up"
               onclick='document.getElementById("signup").className = "visible"'>
     </p>
@@ -83,7 +83,8 @@ $if False:
         <td><input name=password type=password>
     <tr><th>Password
         <td><input name=password2 type=password>
-    <tr><td colspan=2><input type=submit onclick="return validate()">
+    <tr><td colspan=2><input type=submit onclick="return validate()"
+                             value="Create account">
         <p style="color: red; font-weight: bold" id="message"> </p> 
         
     </table>
