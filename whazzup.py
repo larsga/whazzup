@@ -279,7 +279,11 @@ class Logout:
         nocache()
         session.username = None
         web.seeother(web.ctx.homedomain + "/")
-            
+
+class Error:
+    def GET(self):
+        return render.error()
+        
 class AddFave:
     def POST(self):        
         title = string.strip(web.input().get("title") or "").decode("utf-8")
@@ -457,6 +461,7 @@ feeddb = module.feeddb
 web.config.session_parameters['cookie_path'] = '/'
 
 app = web.application(urls, globals(), autoreload = False)
+app.internalerror = Error
 session = web.session.Session(app, web.session.DiskStore(SESSION_DIR))
 users.set_session(session)
 
