@@ -1,7 +1,13 @@
 
 # TODO
 
+# - rework task system so that big tasks are spread out more and not done
+#   all at once, blocking the queue
 # - proper description on how it works on initial page if not signed in
+
+# - record time of last login by a user
+# - only run aging of posts for users which have been seen in the last
+#   ... who knows?
 
 # - extensive test
 #   - weeding out of nits etc
