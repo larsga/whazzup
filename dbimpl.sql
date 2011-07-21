@@ -55,7 +55,7 @@ create table users (
 
 create table notify (
   email varchar(100) not null primary key
-)
+);
 
 -- ORIGINAL QUERY PLAN
 --
