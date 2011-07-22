@@ -12,7 +12,7 @@ $def with (feed, appengine, singleuser, user)
 <h1>Site: $(feed.get_title())</h1>
 
 <table>
-<tr><th>Homepage <td>$(feed.get_link())
+<tr><th>Homepage <td><a href="$(feed.get_link())">$(feed.get_link())</a>
 $if singleuser:
     <form method=post action=/update-site/$(feed.get_local_id())>
     <tr><th>Feed URL <td><input name=feedurl value="$(feed.get_url())" size=80>
@@ -21,7 +21,8 @@ $if singleuser:
     <tr><td colspan=2><input type=submit value="Set">
     </form>
 $else:
-    <tr><th>Feed URL <td>$(feed.get_url())
+    <tr><th>Feed URL <td><a href="$(feed.get_url())">$(feed.get_url())</a>
+<tr><td>Last update <td>$(feed.nice_time_since_last_read()) ago
 </table>
 
 <p>&nbsp;</p>
