@@ -362,7 +362,8 @@ class OPMLHandler(SAXTracker):
             feed = self._factory.make_site(url)
             feed.set_title(attrs.get("title"))
             feed.set_format(attrs.get("type"))
-            feed.set_link(attrs.get("htmlUrl"))
+            if attrs.has_key("htmlUrl"):
+                feed.set_link(attrs.get("htmlUrl"))
             self._registry.add_feed(feed)
         
     def endElement(self, name):
