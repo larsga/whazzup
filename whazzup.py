@@ -200,7 +200,8 @@ class ImportOPML:
         inf.close()
 
         for newfeed in feeds.get_feeds():
-            controller.add_feed(newfeed.get_url(), user)
+            if newfeed.get_url(): # FIXME: ugly workaround
+                controller.add_feed(newfeed.get_url(), user)
         
         return "<p>Imported.</p>"
     
