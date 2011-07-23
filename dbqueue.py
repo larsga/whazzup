@@ -4,7 +4,7 @@ import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
 
-QUEUE_NUMBER = 6327
+QUEUE_NUMBER = 6328
 
 # ----- RECEIVING MESSAGE QUEUE
 
