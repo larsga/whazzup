@@ -33,7 +33,7 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 # ----- CONSTANTS
 
 ACCOUNT_LIMIT = 10
-QUEUE_NUMBER = 6327
+QUEUE_NUMBER = 6328
 
 # ----- UTILITIES
 
@@ -271,6 +271,10 @@ class Item(feedlib.Post):
     def save(self):
         if self._id:
             raise NotImplementedError()
+        if not self._link:
+            # we can't save this post, so we are skipping it entirely. will
+            # need to consider what to do about this one. FIXME
+            return
 
         if len(self._title) > 200:
             self._title = self._title[ : 200]
