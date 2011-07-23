@@ -82,7 +82,7 @@ def parse_date(datestring):
 
         print "CAN'T PARSE:", repr(datestring)
 
-    return datetime.utcnow()
+    return datetime.datetime.utcnow()
 
 def toseconds(timestamp):
     return time.mktime(timestamp.timetuple())

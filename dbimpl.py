@@ -200,7 +200,9 @@ class Feed(feedlib.Feed):
         self._lastread = datetime.datetime.now()
 
     def save(self):
-        if len(self._title) > 100:
+        if self._title is None:
+            self._title = ""
+        elif len(self._title) > 100:
             self._title = self._title[ : 100] # we just truncate
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
                                    error = %s, last_error = %s, max_posts = %s
