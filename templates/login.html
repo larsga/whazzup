@@ -1,6 +1,8 @@
 $def with (users, msg)
 
-<link rel=stylesheet type="text/css" href="/static/style.css">
+$var title = None
+$var url = None
+
 <script>
 function validate() {
   form = document.forms.signupform;
@@ -31,7 +33,6 @@ function validate() {
 }
 </script>
 
-<title>What's up</title>
 <h1>What's up</h1>
 
 $if msg == "failed":
