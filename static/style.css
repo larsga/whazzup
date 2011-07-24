@@ -28,3 +28,11 @@ div.topmenu {
 div.visible {
     display: block;
 }
+
+span.menuitem:before {
+    content: " | ";
+}
+
+span.menuitem:first-child:before {
+    content: "";
+}

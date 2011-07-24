@@ -1,22 +1,6 @@
 
 # TODO
 
-# - change over to a masterlayout template
-
-# - add FAQ
-
-# - run more than one dbqueue for better responsiveness
-
-# - better logging from dbqueue
-
-# - display errors in popular feeds page, too
-
-# - rework task system so that big tasks are spread out more and not done
-#   all at once, blocking the queue
-
-# - only run aging of posts for users which have been seen in the last
-#   ... who knows?
-
 # - extensive test
 #   - weeding out of nits etc
 

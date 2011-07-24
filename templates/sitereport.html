@@ -1,14 +1,8 @@
 $def with (feed, appengine, singleuser, user)
 
-<link rel=stylesheet type="text/css" href="/static/style.css">
+$var title = feed.get_title()
+$var url = "/site/whatever"
 
-<title>Site: $(feed.get_title())</title>
-<div class="topmenu">
-  <a href="/">Home</a> |
-  <a href="/sites">Feeds</a> |
-  <a href="/popular">Popular</a> |
-  <a href="/logout">Log out</a>
-</div>
 <h1>Site: $(feed.get_title())</h1>
 
 <table>
@@ -24,6 +18,10 @@ $else:
     <tr><th>Feed URL <td><a href="$(feed.get_url())">$(feed.get_url())</a>
 <tr><td>Last update <td>$(feed.nice_time_since_last_read()) ago
 </table>
+
+$if feed.get_error():
+    <h2 style="color: red">Error</h2>
+    <pre>$(feed.get_error())</pre>
 
 <p>&nbsp;</p>
     
@@ -64,5 +62,3 @@ $for item in feed.get_items():
     $ ix += 1
                         
 </table>
-$if feed.get_error():
-    <pre>$(feed.get_error())</pre>

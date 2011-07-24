@@ -454,7 +454,8 @@ except ImportError:
 
 # --- SETUP
 
-render = web.template.render(os.path.join(appdir, 'templates/'))
+render = web.template.render(os.path.join(appdir, 'templates/'),
+                             base = "base")
 
 controller = module.controller
 feeddb = module.feeddb

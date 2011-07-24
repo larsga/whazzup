@@ -1,18 +1,9 @@
 $def with (page, low, high, user)
 
-<link rel=stylesheet type="text/css" href="/static/style.css">
-
-<title>What's up</title>
-
-<div class="topmenu">
-  <b>Home</b> |
-  <a href="/sites">Feeds</a> |
-  <a href="/popular">Popular</a> |
-  <a href="/logout">Log out</a>
-</div>
-
 <h1>What's up</h1>
 
+$var url = "/"
+$var title = None
 $ items = user.get_item_range(low, high)
 
 $if not items and low == 0:
