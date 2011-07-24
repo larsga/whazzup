@@ -116,7 +116,8 @@ class CheckFeed:
         
         # read xml
         try:
-            site = rsslib.read_feed(feed.get_url())
+            site = rsslib.read_feed(feed.get_url(), rsslib.DefaultFactory(),
+                                    rsslib.httplib_loader)
             feed.set_error(None)
         except Exception, e:
             # we failed, so record the failure and move on
@@ -318,6 +319,10 @@ cron.add_task(QueueTask("RemoveDeadFeeds", 86400))
 start_cron_worker()
 
 # ----- START
+
+# we need to do this so that we don't hang for too long waiting for feeds
+import socket
+socket.setdefaulttimeout(20)
 
 try:
     queue_worker()

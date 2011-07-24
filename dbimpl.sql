@@ -15,7 +15,7 @@ create table posts (
   id serial primary key,
   title varchar(200) not null, -- at what point do we truncate?
   link varchar(400) not null,
-  descr text not null,
+  descr text,
   pubdate timestamp not null,
   author varchar(100),
   feed int not null

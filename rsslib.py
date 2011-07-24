@@ -8,7 +8,7 @@ Supports both RSS 0.90 and 0.91.
 $Id: rsslib.py,v 1.9 2010/06/08 16:19:57 larsga Exp $
 """
 
-import string, urlparse
+import string, urlparse, urllib2, httplib
 from xml.sax import saxutils, make_parser
 from xml.sax.handler import feature_namespaces, ContentHandler
 from saxtracker import SAXTracker
@@ -274,9 +274,53 @@ class RSSHandler(SAXTracker):
 
 def urllib_loader(parser, url):
     # this exists because it allows us to inject other mechanisms for
-    # downloading content, such as GAE urlfetch
+    # downloading content, such as GAE urlfetch.
     parser.parse(url)
-            
+
+def httplib_loader(parser, url):
+    # this is better than urllib_loader because it allows us more
+    # fine-grained control over error handling. it also allows us to
+    # work around problems like the user giving us the homepage URL
+    # instead of the feed URL.
+
+    # FIXME: handle https
+    assert url.startswith("http://"), "Bad URL: " + repr(url)
+    pos = url.find("/", 7)
+    netloc = url[7 : pos]
+    path = url[pos : ]
+
+    parts = netloc.split(":")
+    if len(parts) == 1:
+        host = netloc
+        port = 80
+    else:
+        (host, port) = parts
+        port = int(port)
+
+    conn = httplib.HTTPConnection(host, port)
+    conn.request("GET", path)
+
+    resp = conn.getresponse()
+    if resp.status == 404:
+        raise Exception("404 Not Found")
+    elif resp.status >= 400:
+        raise Exception("%s %s" % (resp.status, resp.reason))
+    elif resp.status >= 300:
+        # handle redirects
+        # FIXME: consider whether 302 should lead to a database update
+        location = resp.getheader("Location")
+        if location:
+            location = urlparse.urljoin(url, location)
+            if location == url:
+                return # avoid infinite loops
+            httplib_loader(parser, location)
+        return
+        
+    # FIXME: handle text/html responses
+
+    parser.feed(resp.read())
+    conn.close()
+    
 def read_xml(url, handler, data_loader = urllib_loader):
     p = make_parser()
     p.setContentHandler(handler)
