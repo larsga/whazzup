@@ -33,7 +33,7 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 # ----- CONSTANTS
 
 ACCOUNT_LIMIT = 10
-QUEUE_NUMBER = 6328
+QUEUE_NUMBER = 6329
 
 # ----- UTILITIES
 
@@ -204,6 +204,11 @@ class Feed(feedlib.Feed):
             self._title = ""
         elif len(self._title) > 100:
             self._title = self._title[ : 100] # we just truncate
+
+
+        if self._error and len(self._error) > 100:
+            self._error = self._error[ : 100]
+            
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
                                    error = %s, last_error = %s, max_posts = %s
                   where id = %s""",
