@@ -499,3 +499,4 @@ class WordDatabase:
 
     def close(self):
         raise NotImplementedError()
+

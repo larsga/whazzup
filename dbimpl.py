@@ -1,11 +1,19 @@
 
 # TODO
 
+# - change over to a masterlayout template
+
+# - add FAQ
+
+# - run more than one dbqueue for better responsiveness
+
+# - better logging from dbqueue
+
+# - display errors in popular feeds page, too
+
 # - rework task system so that big tasks are spread out more and not done
 #   all at once, blocking the queue
-# - proper description on how it works on initial page if not signed in
 
-# - record time of last login by a user
 # - only run aging of posts for users which have been seen in the last
 #   ... who knows?
 
@@ -13,8 +21,6 @@
 #   - weeding out of nits etc
 
 # - operation to remove users
-
-# - deploy
 
 import datetime, hashlib
 import psycopg2, sysv_ipc
