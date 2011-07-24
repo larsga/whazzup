@@ -4,7 +4,7 @@ import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
 
-QUEUE_NUMBER = 6328
+QUEUE_NUMBER = 6329
 
 # ----- RECEIVING MESSAGE QUEUE
 
@@ -93,7 +93,7 @@ class PurgeFeed:
 
     def invoke(self, feedid):
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
-        if not feed.get_max_posts():
+        if not feed or not feed.get_max_posts():
             return
 
         items = feed.get_items()
