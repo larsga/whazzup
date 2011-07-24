@@ -1,0 +1,21 @@
+$def with (content)
+
+<link rel=stylesheet type="text/css" href="/static/style.css">
+
+<title>What's up
+$if content.title:
+    &mdash; $content.title
+</title>
+
+$if content.url:
+    <div class="topmenu">
+    $ pages = [("Home", "/"), ("Feeds", "/sites"), ("Popular", "/popular"), ("Log out", "/logout") ]
+    
+    $for (name, url) in pages:
+        $if url == content.url:
+            <span class=menuitem><b>$name</b></span>
+        $else:
+            <span class=menuitem><a href="$url">$name</a></span>
+    </div>
+
+$:content
