@@ -34,6 +34,7 @@ urls = (
     '/logout', 'Logout',
     '/signup', 'Signup',
     '/notify', 'Notify',
+    '/faq', 'FAQ',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -284,7 +285,11 @@ class Logout:
 class Error:
     def GET(self):
         return render.error()
-        
+
+class FAQ:
+    def GET(self):
+        return render.faq()
+    
 class AddFave:
     def POST(self):        
         title = string.strip(web.input().get("title") or "").decode("utf-8")
