@@ -121,7 +121,7 @@ class CheckFeed:
             feed.set_error(None)
         except Exception, e:
             # we failed, so record the failure and move on
-            traceback.print_exc()
+            #traceback.print_exc()
             feed.set_error(str(e))
             feed.save()
             return
