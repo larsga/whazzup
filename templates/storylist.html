@@ -2,8 +2,8 @@ $def with (page, low, high, user)
 
 <h1>What's up</h1>
 
+$var title_ = "page %s" % page
 $var url = "/"
-$var title = None
 $ items = user.get_item_range(low, high)
 
 $if not items and low == 0:
