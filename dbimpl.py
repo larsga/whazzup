@@ -23,7 +23,7 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 # ----- CONSTANTS
 
 ACCOUNT_LIMIT = 10
-QUEUE_NUMBER = 6329
+QUEUE_NUMBER = 6330
 
 # ----- UTILITIES
 
@@ -256,9 +256,12 @@ class Item(feedlib.Post):
 
     def get_pubdate(self):
         if self._date:
-            return str(self.get_date())
+            return str(self._date)
         else:
             return None
+
+    def get_date(self):
+        return self._date
 
     def get_site(self):
         return self._feed
@@ -279,10 +282,11 @@ class Item(feedlib.Post):
             print "Link:", len(self._link)
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
-        
+
+        print repr(self.get_date())
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s)
-       """, (self._title, self._link, self._descr, self.get_pubdate(),
+       """, (self._title, self._link, self._descr, self.get_date(),
               self._author, self._feed.get_local_id()))
         conn.commit()
 

@@ -4,7 +4,7 @@ import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
 
-QUEUE_NUMBER = 6329
+QUEUE_NUMBER = 6330
 
 # ----- RECEIVING MESSAGE QUEUE
 
@@ -140,11 +140,11 @@ class CheckFeed:
             if items.has_key(newitem.get_link()):
                 continue
 
+            parsed_date = feedlib.parse_date(newitem.get_pubdate())
             newposts = True
             itemobj = dbimpl.Item(None, newitem.get_title(),
                                   newitem.get_link(), newitem.get_description(),
-                                  newitem.get_pubdate() or datetime.datetime.now(),
-                                  newitem.get_author(), feed)
+                                  parsed_date, newitem.get_author(), feed)
             itemobj.save()
         
         # update feed row

@@ -283,8 +283,7 @@ def httplib_loader(parser, url):
     # work around problems like the user giving us the homepage URL
     # instead of the feed URL.
 
-    # FIXME: handle https
-    assert url.startswith("http://"), "Bad URL: " + repr(url)
+    assert (url.startswith("http://") or url.startswith("https://")), "Bad URL: " + repr(url)
     pos = url.find("/", 7)
     netloc = url[7 : pos]
     path = url[pos : ]
@@ -292,12 +291,15 @@ def httplib_loader(parser, url):
     parts = netloc.split(":")
     if len(parts) == 1:
         host = netloc
-        port = 80
+        port = None # defaults depending on protocol
     else:
         (host, port) = parts
         port = int(port)
 
-    conn = httplib.HTTPConnection(host, port)
+    if url.startswith("http://"):
+        conn = httplib.HTTPConnection(host, port or 80)
+    else:
+        conn = httplib.HTTPSConnection(host, port or 443) # FIXME: doesn't work
     conn.request("GET", path)
 
     resp = conn.getresponse()
