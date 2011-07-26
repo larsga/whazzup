@@ -56,7 +56,8 @@ class Controller(feedlib.Controller):
         return False
     
     def vote_received(self, user, id, vote):
-        mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote))
+        # sending with higher priority so UI can be updated correctly
+        mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote), 2)
     
     def add_feed(self, url, user):
         feed = feeddb.add_feed(url)
@@ -282,7 +283,6 @@ class Item(feedlib.Post):
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
 
-        print repr(self.get_date())
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s)
        """, (self._title, self._link, self._descr, self.get_date(),
@@ -403,7 +403,6 @@ class RatedPost(feedlib.RatedPost):
                     int(self.get_subscription().get_feed().get_local_id()),
                     self._points, self._prob))
             self._exists_in_db = True
-        conn.commit()
 
     def age(self):
         self._points = feedlib.calculate_points(self.get_overall_probability(),
@@ -574,13 +573,13 @@ class SendingMessageQueue:
         # the message queue was full
         self._internal_queue = []
 
-    def send(self, msg):
+    def send(self, msg, priority = 1):
         if self._internal_queue:
             pos = 0
-            for oldmsg in self._internal_queue:
+            for (oldmsg, priority) in self._internal_queue:
                 try:
                     print "Sending from internal queue", repr(msg)
-                    self._send(oldmsg)
+                    self._send(oldmsg, priority)
                     pos += 1
                 except sysv_ipc.BusyError:
                     print "Ooops, busy"
@@ -590,14 +589,14 @@ class SendingMessageQueue:
             print "Truncated queue", self._internal_queue
         
         try:
-            self._send(msg)
+            self._send(msg, priority)
         except sysv_ipc.BusyError:
             print "Queue full, holding message", repr(msg)
-            self._internal_queue.append(msg)
+            self._internal_queue.append((msg, priority))
 
-    def _send(self, msg):
+    def _send(self, msg, msgtype):
         try:
-            self._mqueue.send(msg, False)
+            self._mqueue.send(msg, False, msgtype)
         except sysv_ipc.ExistentialError:
             # this could be either because dbqueue was restarted (new instance
             # of queue) or because dbqueue is not running at all. we reopen

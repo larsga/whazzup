@@ -14,30 +14,41 @@ class ReceivingMessageQueue:
         # create queue, and fail if it already exists
         self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER, sysv_ipc.IPC_CREX,
                                              0666)
-        self._queue = []
+
+        self._queue = [None, [], []] # one queue per type. 0 is blank
 
     def get_next_message(self):
-        try:
-            msg = self._mqueue.receive(False)[0] # discard type
-            while msg:
-                self._queue.append(msg)
-                msg = self._mqueue.receive(False)[0]
-        except sysv_ipc.BusyError:
-            pass
-        
-        if self._queue:
-            msg = self._queue[0]
-            self._queue = self._queue[1 : ]
-            return msg
-        else:
-            return None
+        self._gather_into_queue()
+
+        return (self._get_from_queue(2) or self._get_from_queue(1))
 
     def get_queue_size(self):
-        return len(self._queue)
+        return len(self._queue[1] + self._queue[2])
 
     def remove(self):
         self._mqueue.remove()
 
+    def _gather_into_queue(self):
+        try:
+            (msg, type) = self._receive()
+            while msg:
+                self._queue[type].append(msg)
+                (msg, type) = self._receive()
+        except sysv_ipc.BusyError:
+            pass
+        
+    def _receive(self):
+        "Returns (msg, type) tuple."
+        return self._mqueue.receive(False)
+
+    def _get_from_queue(self, type):
+        if self._queue[type]:
+            msg = self._queue[type][0]
+            self._queue[type] = self._queue[type][1 : ]
+            return msg
+        else:
+            return None
+    
 def queue_worker():
     while not stop:
         msg = recv_mqueue.get_next_message()
@@ -90,6 +101,7 @@ class AgeSubscription:
         sub = dbimpl.Subscription(feed, user)
         for item in sub.get_rated_posts():
             item.age()
+        dbimpl.conn.commit()
             
 class PurgePosts:
 
@@ -174,14 +186,16 @@ class RecalculateSubscription:
         # load all already rated posts on this subscription 
         ratings = {} # int(postid) -> ratedpost
         dbimpl.cur.execute("""
-          select username, post, points from rated_posts
-          where username = %s and feed = %s
+          select username, post, points,
+                 id, title, link, descr, pubdate, author
+          from rated_posts r
+          join posts p on post = id
+          where username = %s and r.feed = %s
         """, (username, feedid))
-        for (username, postid, points) in dbimpl.cur.fetchall():
-            post = dbimpl.feeddb.get_item_by_id(postid)
-            if post:
-                # may have been removed in the meantime
-                ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
+        for (username, postid, points,
+             id, title, link, descr, date, author) in dbimpl.cur.fetchall():
+            post = dbimpl.Item(id, title, link, descr, date, author, feed)
+            ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
 
         # load all seen posts
         seen = dbimpl.query_for_set("""
@@ -199,6 +213,8 @@ class RecalculateSubscription:
                 rating = dbimpl.RatedPost(user, item, sub)
             rating.recalculate()
             rating.save()
+
+        dbimpl.conn.commit()
 
 class RecalculateAllPosts:
 
