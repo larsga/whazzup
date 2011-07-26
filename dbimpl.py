@@ -271,6 +271,8 @@ class Item(feedlib.Post):
             # need to consider what to do about this one. FIXME
             return
 
+        if not self._title:
+            self._title = "[No title]" # this avoids crashes
         if len(self._title) > 200:
             self._title = self._title[ : 200]
         if len(self._link) > 400:
@@ -280,7 +282,7 @@ class Item(feedlib.Post):
         
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s)
-        """, (self._title, self._link, self._descr, self.get_pubdate(),
+       """, (self._title, self._link, self._descr, self.get_pubdate(),
               self._author, self._feed.get_local_id()))
         conn.commit()
 
@@ -336,6 +338,10 @@ class Subscription(feedlib.Subscription):
     def record_vote(self, vote):
         if self._up is None:
             self._load_counts()
+            if self._up is None: # means loading failed (ie: no such sub)
+                # FIXME: not happy with this. it's just a workaround, hiding
+                # the real issue. have no better ideas right now, though.
+                return # there's nothing for us to do
 
         if vote == "up":
             self._up += 1
@@ -353,7 +359,9 @@ class Subscription(feedlib.Subscription):
                        where username = %s and feed = %s""",
                     (self._user.get_username(),
                      int(self._feed.get_local_id())))
-        (self._up, self._down) = cur.fetchone()
+        row = cur.fetchone()
+        if row:
+            (self._up, self._down) = row
 
 class RatedPost(feedlib.RatedPost):
 

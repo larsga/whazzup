@@ -50,7 +50,15 @@ def queue_worker():
 
         print msg, "(%s)" % recv_mqueue.get_queue_size()
         start = time.time()
-        apply(msg_dict[key].invoke, tokens[1 : ])
+        try:
+            apply(msg_dict[key].invoke, tokens[1 : ])
+        except:
+            print "ERROR"
+            outf = open("dbqueue.err", "a")
+            outf.write(("-" * 75) + "\n")
+            outf.write(msg + "\n")
+            traceback.print_exc(None, outf)
+            outf.close()
         print "  time: ", (time.time() - start)
 
 # ----- RECEIVABLE MESSAGES
