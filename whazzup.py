@@ -35,6 +35,7 @@ urls = (
     '/signup', 'Signup',
     '/notify', 'Notify',
     '/faq', 'FAQ',
+    '/stats', 'Stats',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -440,6 +441,24 @@ class DeleteUser:
     def POST(self, key):
         controller.delete_user(key)
 
+# --- ADMIN PAGES
+
+def admin_only(user):
+    assert user.get_username() == 'larsga'
+
+class Stats:
+
+    def GET(self):
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
+
+        admin_only(user)
+
+        return render.stats(feeddb)
+        
+# --- SETUP
+        
 web.config.debug = False
 web.webapi.internalerror = web.debugerror
 
@@ -456,8 +475,6 @@ except ImportError:
     import dbimpl
     users = dbimpl.users
     module = dbimpl
-
-# --- SETUP
 
 render = web.template.render(os.path.join(appdir, 'templates/'),
                              base = "base")

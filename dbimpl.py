@@ -26,7 +26,7 @@ ACCOUNT_LIMIT = 10
 
 # ----- UTILITIES
 
-def query_for_value(query, args):
+def query_for_value(query, args = ()):
     cur.execute(query, args)
     row = cur.fetchone()
     if row:
@@ -124,6 +124,27 @@ class FeedDatabase(feedlib.Database):
                      maxposts, subs)
                 for (feedid, title, xmlurl, htmlurl, lastread, maxposts, subs)
                 in cur.fetchall()]
+
+    def get_user_count(self):
+        return query_for_value("select count(*) from users")
+
+    def get_feed_count(self):
+        return query_for_value("select count(*) from feeds")
+
+    def get_post_count(self):
+        return query_for_value("select count(*) from posts")
+
+    def get_subscription_count(self):
+        return query_for_value("select count(*) from subscriptions")
+
+    def get_rated_posts_count(self):
+        return query_for_value("select count(*) from rated_posts")
+
+    def get_read_posts_count(self):
+        return query_for_value("select count(*) from read_posts")
+
+    def get_notification_count(self):
+        return query_for_value("select count(*) from notify")
     
 class Feed(feedlib.Feed):
 
@@ -299,7 +320,7 @@ class Item(feedlib.Post):
         return query_for_value("""select post from read_posts
                                   where username = %s and post = %s""",
                                (user.get_username(), self._id))
-
+    
 class Subscription(feedlib.Subscription):
 
     def __init__(self, feed, user, up = None, down = None):
