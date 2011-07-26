@@ -1,0 +1,16 @@
+$def with (stats)
+
+$var url = "/stat"
+$var title = "Stats"
+
+<h1>What's up &mdash; Stats</h1>
+
+<table>
+<tr><th>Users         <td>$(stats.get_user_count())
+<tr><th>Feeds         <td>$(stats.get_feed_count())
+<tr><th>Posts         <td>$(stats.get_post_count())      
+<tr><th>Subscriptions <td>$(stats.get_subscription_count())
+<tr><th>Rated posts   <td>$(stats.get_rated_posts_count())
+<tr><th>Read posts    <td>$(stats.get_read_posts_count())
+<tr><th>Notifications <td>$(stats.get_notification_count())      
+</table>
