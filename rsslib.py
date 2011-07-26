@@ -312,6 +312,7 @@ def httplib_loader(parser, url):
         # FIXME: consider whether 302 should lead to a database update
         location = resp.getheader("Location")
         if location:
+            location = location.decode("utf-8") # ensure both are unicode
             location = urlparse.urljoin(url, location)
             if location == url:
                 return # avoid infinite loops
