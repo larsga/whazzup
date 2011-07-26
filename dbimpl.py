@@ -23,7 +23,6 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 # ----- CONSTANTS
 
 ACCOUNT_LIMIT = 10
-QUEUE_NUMBER = 6330
 
 # ----- UTILITIES
 
