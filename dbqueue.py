@@ -1,5 +1,5 @@
 
-import threading, time, atexit, traceback, datetime
+import threading, time, atexit, traceback, datetime, os
 import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
@@ -70,7 +70,10 @@ def queue_worker():
             outf.write(msg + "\n")
             traceback.print_exc(None, outf)
             outf.close()
-        print "  time: ", (time.time() - start)
+        spent = time.time() - start
+        print "  time: ", spent
+
+        stats.task_sample(key, spent)
 
 # ----- RECEIVABLE MESSAGES
 
@@ -246,7 +249,36 @@ class RecordVote:
             link.record_vote(vote)
             link.get_subscription().record_vote(vote)
             dbimpl.mqueue.send("RecalculateAllPosts " + username)
-        
+
+class StatsReport:
+
+    def invoke(self):
+        outf = open(os.path.join(STATS_DIR, "queue-stats.html"), "w")
+        outf.write("""
+        <title>Whazzup queue stats</title>
+        <style>td { padding-right: 12pt }</style>
+        <h1>Whazzup queue stats</h1>
+
+        <table>
+        <tr><th>Task <th>Acc <th>Avg <th>Max <th>Min <th>Count
+        """)
+
+        tasks = feedlib.sort(stats.get_tasks(), TaskStats.get_sum)
+        tasks.reverse()
+        for task in tasks:
+            outf.write("<tr><td>%s <td>%s <td>%s <td>%s <td>%s <td>%s\n" %
+                       (task.get_name(),
+                        str(task.get_sum())[ : 5],
+                        str(task.get_average())[ : 5],
+                        str(task.get_max())[ : 5],
+                        str(task.get_min())[ : 5],
+                        task.get_count()))
+
+        outf.write("""
+        </table>
+        """)
+        outf.close()
+            
 # ----- CRON SERVICE
 
 class CronService:
@@ -304,6 +336,58 @@ class QueueTask(RepeatableTask):
     def _invoke(self):
         dbimpl.mqueue.send(self._message)
 
+# ----- STATISTICS COLLECTOR
+
+class StatisticsCollector:
+
+    def __init__(self):
+        self._tasks = {} # key -> TaskStats
+
+    def task_sample(self, key, secs):
+        stats = self._tasks.get(key)
+        if not stats:
+            stats = TaskStats(key)
+            self._tasks[key] = stats
+        stats.sample(secs)
+
+    def get_tasks(self):
+        return self._tasks.values()
+
+class TaskStats:
+
+    def __init__(self, key):
+        self._key = key
+        self._min = 10000000.0
+        self._max = 0
+        self._sum = 0
+        self._count = 0
+
+    def sample(self, secs):
+        if secs < self._min:
+            self._min = secs
+        if secs > self._max:
+            self._max = secs
+        self._sum += secs
+        self._count += 1
+
+    def get_name(self):
+        return self._key
+
+    def get_sum(self):
+        return self._sum
+
+    def get_average(self):
+        return self._sum / self._count
+
+    def get_max(self):
+        return self._max
+
+    def get_min(self):
+        return self._min
+
+    def get_count(self):
+        return self._count
+    
 # ----- CLEAN STOPPING
 
 stop = False
@@ -328,6 +412,7 @@ msg_dict = {
     "RecalculateAllPosts" : RecalculateAllPosts(),
     "PurgeFeed" : PurgeFeed(),
     "RecordVote" : RecordVote(),
+    "StatsReport" : StatsReport(),
     }
 recv_mqueue = ReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
@@ -347,6 +432,8 @@ start_cron_worker()
 # we need to do this so that we don't hang for too long waiting for feeds
 import socket
 socket.setdefaulttimeout(20)
+
+stats = StatisticsCollector()
 
 try:
     queue_worker()
