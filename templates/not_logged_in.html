@@ -1,0 +1,57 @@
+$def with (loginurl)
+
+$var url = None
+
+<link href="http://whazzup.garshol.priv.no/static/style.css"
+      rel=stylesheet>
+<style>
+#container { width: 60% }
+p, li { font-size: 120% }
+li    { margin-bottom: 8pt }
+</style>
+
+<h1>What's up?</h1>
+
+<div class=health><a href="$:loginurl">Log in or sign up</a></div>
+
+<div id="container">
+<p>This is a newsreader that learns what you are interested in, and
+ranks news by how interesting it thinks the news are for you.
+
+<h2>How it works</h2>
+
+<ul>
+  <li>Subscribe to feeds
+  <li>Tell the system which stories you like and dislike
+  <li>Get a list of stories with the ones most interesting to you at
+  the top    
+  <li>If you don't touch a story, it slowly sinks down the list
+</ul>
+
+<p>What's up? uses statistical language processing to rank the
+  stories, based on the feedback you give it.
+
+<h2>How to use it</h2>
+
+<ul>
+  <li><a href="$:loginurl">Log in</a>
+
+  <li>Click "Feeds" in the top menu bar, then subscribe to posts by
+  pasting the URL of an RSS or Atom feed
+
+  <li>Or you can choose "Popular" in the menu, and subscribe to some
+  of the 50 most popular feeds
+
+  <li>If you like a post, vote it up with the up arrow. If you dislike
+  it, vote it down with the down arrow. If you just want to remove it,
+  click the minus button
+</ul>
+
+<p>That's it. If you want more detail, see
+  <a href="http://www.garshol.priv.no/blog/216.html">this blog post</a>.
+  
+<p><b>WARNING:</b> This system is still in development! There are no
+guarantees about the use. All your data may have to be deleted if the
+system has to be re-architected. All use at own risk.
+
+</div>
