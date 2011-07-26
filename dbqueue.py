@@ -1,5 +1,5 @@
 
-import threading, time, atexit, traceback, datetime, os
+import threading, time, atexit, traceback, datetime, os, operator
 import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
@@ -256,19 +256,27 @@ class StatsReport:
         outf = open(os.path.join(STATS_DIR, "queue-stats.html"), "w")
         outf.write("""
         <title>Whazzup queue stats</title>
-        <style>td { padding-right: 12pt }</style>
+        <style>
+          td { padding-right: 12pt }
+          th { text-align: left }
+        </style>
         <h1>Whazzup queue stats</h1>
 
+        <p>Produced: %s</p>
+
         <table>
-        <tr><th>Task <th>Acc <th>Avg <th>Max <th>Min <th>Count
-        """)
+        <tr><th>Task <th>Acc <th>%% <th>Avg <th>Max <th>Min <th>Count
+        """ % datetime.datetime.now())
 
         tasks = feedlib.sort(stats.get_tasks(), TaskStats.get_sum)
         tasks.reverse()
+        total = reduce(operator.add, [task.get_sum() for task in tasks])
+        
         for task in tasks:
-            outf.write("<tr><td>%s <td>%s <td>%s <td>%s <td>%s <td>%s\n" %
+            outf.write("<tr><td>%s <td>%s <td>%s <td>%s <td>%s <td>%s <td>%s\n"%
                        (task.get_name(),
                         str(task.get_sum())[ : 5],
+                        str((task.get_sum() / total) * 100)[ : 5],
                         str(task.get_average())[ : 5],
                         str(task.get_max())[ : 5],
                         str(task.get_min())[ : 5],
