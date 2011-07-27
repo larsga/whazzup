@@ -277,6 +277,15 @@ def urllib_loader(parser, url):
     # downloading content, such as GAE urlfetch.
     parser.parse(url)
 
+def escape_non_ascii(url):
+    chars = []
+    for ch in url:
+        if ord(ch) > 127:
+            chars.append("%" + hex(ord(ch))[2 : ])
+        else:
+            chars.append(ch)
+    return "".join(chars)
+
 def httplib_loader(parser, url):
     # this is better than urllib_loader because it allows us more
     # fine-grained control over error handling. it also allows us to
@@ -312,10 +321,11 @@ def httplib_loader(parser, url):
         # FIXME: consider whether 302 should lead to a database update
         location = resp.getheader("Location")
         if location:
-            location = location.decode("utf-8") # ensure both are unicode
+            location = location.decode("iso-8859-1") # ensure both are unicode
             location = urlparse.urljoin(url, location)
             if location == url:
                 return # avoid infinite loops
+            location = escape_non_ascii(location)
             httplib_loader(parser, location)
         return
         
