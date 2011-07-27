@@ -1,5 +1,5 @@
 
-import threading, time, atexit, traceback, datetime, os, operator
+import threading, time, atexit, traceback, datetime, os, operator, sys
 import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
@@ -60,6 +60,7 @@ def queue_worker():
         key = tokens[0]
 
         print msg, "(%s)" % recv_mqueue.get_queue_size()
+        sys.stdout.flush()
         start = time.time()
         try:
             apply(msg_dict[key].invoke, tokens[1 : ])
@@ -72,6 +73,7 @@ def queue_worker():
             outf.close()
         spent = time.time() - start
         print "  time: ", spent
+        sys.stdout.flush()
 
         stats.task_sample(key, spent)
 
@@ -270,7 +272,7 @@ class StatsReport:
 
         tasks = feedlib.sort(stats.get_tasks(), TaskStats.get_sum)
         tasks.reverse()
-        total = reduce(operator.add, [task.get_sum() for task in tasks])
+        total = reduce(operator.add, [task.get_sum() for task in tasks], 0)
         
         for task in tasks:
             outf.write("<tr><td>%s <td>%s <td>%s <td>%s <td>%s <td>%s <td>%s\n"%
