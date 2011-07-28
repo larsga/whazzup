@@ -31,6 +31,14 @@ h2, p { width: 55% }
   overall score for the story. I've found this very helpful in
   learning what is going on "under the covers".
 
+<h2><a name="delay">Why don't my votes take effect
+    immediately?</a></h2>
+
+<p>The downloading of new stories and recalculation of scores all
+  happen in a background process working from a message queue, and
+  this queue can fill up at times. I'm working on making this part of
+  the system more responsive.
+  
 <h2><a name="languages">What languages are supported?</a></h2>
 
 <p>At the moment only English and Norwegian. Other languages also
