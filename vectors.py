@@ -25,6 +25,9 @@ class Vector:
 
     def get_count(self, term):
         return self._vector.get(term, 0)
+
+    def get_map(self):
+        return self._vector
         
     def cosine(self, other):
         topsum = 0

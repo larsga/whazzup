@@ -388,8 +388,8 @@ class RatedPost:
     def get_word_probability(self):
         probs = []
         for (word, count) in self._post.get_vector().get_pairs():
-            for ix in range(count):
-                ratio = self._user.get_word_ratio(word)
+            ratio = self._user.get_word_ratio(word)
+            for ix in range(count):                
                 probs.append(ratio)
 
         try:
