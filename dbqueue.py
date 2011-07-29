@@ -17,6 +17,11 @@ class IPCReceivingMessageQueue:
 
         self._queue = [None, [], []] # one queue per type. 0 is blank
 
+        # we store a copy of every message here, to ensure that we don't
+        # get the same message in the queue twice. this avoids some
+        # performance issues.
+        self._messages = set()
+
     def get_next_message(self):
         self._gather_into_queue()
 
@@ -32,7 +37,9 @@ class IPCReceivingMessageQueue:
         try:
             (msg, type) = self._receive()
             while msg:
-                self._queue[type].append(msg)
+                if msg not in self._messages:
+                    self._queue[type].append(msg)
+                    self._messages.add(msg)
                 (msg, type) = self._receive()
         except sysv_ipc.BusyError:
             pass
@@ -45,6 +52,7 @@ class IPCReceivingMessageQueue:
         if self._queue[type]:
             msg = self._queue[type][0]
             self._queue[type] = self._queue[type][1 : ]
+            self._messages.remove(msg)
             return msg
         else:
             return None
