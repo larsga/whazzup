@@ -91,10 +91,12 @@ class FindFeedsToCheck:
 
     def invoke(self):
         dbimpl.cur.execute("""
-        select id from feeds
-          where
-          last_read is null or
-          last_read + (time_to_wait * interval '1 second') < now() 
+          select id from feeds where
+            (error is null and (last_read is null or
+                     last_read + (time_to_wait * interval '1 second') < now()))
+            or
+            (error is not null and
+             last_error + (time_to_wait * interval '1 second') < now())
         """)
         for (id) in dbimpl.cur.fetchall():
             dbimpl.mqueue.send("CheckFeed %s" % id)
