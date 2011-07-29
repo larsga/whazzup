@@ -8,7 +8,7 @@ from config import *
 
 # ----- RECEIVING MESSAGE QUEUE
 
-class ReceivingMessageQueue:
+class IPCReceivingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it already exists
@@ -255,6 +255,8 @@ class RecordVote:
 class StatsReport:
 
     def invoke(self):
+        size = stats.get_queue_size_stats()
+        
         outf = open(os.path.join(STATS_DIR, "queue-stats.html"), "w")
         outf.write("""
         <title>Whazzup queue stats</title>
@@ -266,9 +268,19 @@ class StatsReport:
 
         <p>Produced: %s</p>
 
+        <h2>Queue stats</h2>
+
+        <table>
+        <tr><th>Aspect <th>Average <th>Min <th>Max
+        <tr><td>Size   <td>%s      <td>%s  <td>%s
+        </table>
+
+        <h2>Task types</h2>
+
         <table>
         <tr><th>Task <th>Acc <th>%% <th>Avg <th>Max <th>Min <th>Count
-        """ % datetime.datetime.now())
+        """ % (datetime.datetime.now(),
+               size.get_average(), size.get_min(), size.get_max()))
 
         tasks = feedlib.sort(stats.get_tasks(), TaskStats.get_sum)
         tasks.reverse()
@@ -289,12 +301,34 @@ class StatsReport:
         """)
         outf.close()
 
+# ----- FEED DOWNLOADING THREAD
+
+class InMemoryMessageQueue:
+
+    def __init__(self):
+        self._messages = []
+
+    def send(self, msg):
+        self._messages.append(msg)
+
+    def receive(self):
+        if not self._messages:
+            return
+
+        msg = self._messages[0]
+        self._messages = self._messages[1 : ]
+        return msg
+
+    def get_queue_size(self):
+        return len(self._messages)
+        
 # ----- STATISTICS COLLECTOR
 
 class StatisticsCollector:
 
     def __init__(self):
         self._tasks = {} # key -> TaskStats
+        self._queue_size = TaskStats()
 
     def task_sample(self, key, secs):
         stats = self._tasks.get(key)
@@ -303,12 +337,18 @@ class StatisticsCollector:
             self._tasks[key] = stats
         stats.sample(secs)
 
+    def queue_size_sample(self, size):
+        self._queue_size.sample(size)
+
     def get_tasks(self):
         return self._tasks.values()
 
+    def get_queue_size_stats(self):
+        return self._queue_size
+
 class TaskStats:
 
-    def __init__(self, key):
+    def __init__(self, key = None):
         self._key = key
         self._min = 10000000.0
         self._max = 0
@@ -340,7 +380,22 @@ class TaskStats:
 
     def get_count(self):
         return self._count
-    
+
+# ----- QUEUE SIZE SAMPLER TASK
+
+def sampler_task():
+    times = 0
+    while not stop:
+        if times == 60:
+            stats.queue_size_sample(recv_mqueue.get_queue_size())
+            times = 0
+        times += 1
+        time.sleep(1)
+
+def start_sampler_task():
+    thread = threading.Thread(target = sampler_task, name = "SamplerTask")
+    thread.start()
+
 # ----- CLEAN STOPPING
 
 stop = False
@@ -367,7 +422,7 @@ msg_dict = {
     "RecordVote" : RecordVote(),
     "StatsReport" : StatsReport(),
     }
-recv_mqueue = ReceivingMessageQueue()
+recv_mqueue = IPCReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
 import dbimpl # creates the sending message queue in this process
 
@@ -378,6 +433,7 @@ import socket
 socket.setdefaulttimeout(20)
 
 stats = StatisticsCollector()
+start_sampler_task()
 
 try:
     queue_worker()
