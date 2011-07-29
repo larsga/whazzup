@@ -14,7 +14,7 @@ $if not items and low == 0:
 <table>
 $ ix = low
 $for item in items:
-    <tr><td>$(ix + 1).
+    <tr><td class=story>
     <td><a href="/vote/up/$(item.get_local_id())" title="Vote up"
            ><img src=static/up.png border=0></a>
     <td><a href="/faveform/$(item.get_local_id())" title="Not in use"
