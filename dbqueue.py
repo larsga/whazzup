@@ -266,7 +266,8 @@ class StatsReport:
         </style>
         <h1>Whazzup queue stats</h1>
 
-        <p>Produced: %s</p>
+        <p>Queue started: %s<br>
+        Report dated: %s</p>
 
         <h2>Queue stats</h2>
 
@@ -279,7 +280,7 @@ class StatsReport:
 
         <table>
         <tr><th>Task <th>Acc <th>%% <th>Avg <th>Max <th>Min <th>Count
-        """ % (datetime.datetime.now(),
+        """ % (startup_time, datetime.datetime.now(),
                size.get_average(), size.get_min(), size.get_max()))
 
         tasks = feedlib.sort(stats.get_tasks(), TaskStats.get_sum)
@@ -434,6 +435,7 @@ socket.setdefaulttimeout(20)
 
 stats = StatisticsCollector()
 start_sampler_task()
+startup_time = datetime.datetime.now()
 
 try:
     queue_worker()
