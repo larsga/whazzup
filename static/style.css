@@ -36,3 +36,8 @@ span.menuitem:before {
 span.menuitem:first-child:before {
     content: "";
 }
+
+td.story:before {
+    counter-increment: story;
+    content: counter(story) ".";
+}
