@@ -104,18 +104,24 @@ class FindFeedsToCheck:
 class AgePosts:
 
     def invoke(self):
-        dbimpl.cur.execute("select feed, username from subscriptions")
+        dbimpl.cur.execute("select username from users")
         for row in dbimpl.cur.fetchall():
-            dbimpl.mqueue.send("AgeSubscription %s %s" % row)
+            dbimpl.mqueue.send("AgeSubscriptions %s" % row)
 
-class AgeSubscription:
+class AgeSubscriptions:
 
-    def invoke(self, feedid, username):
-        feed = dbimpl.feeddb.get_feed_by_id(feedid)
-        user = dbimpl.User(username)
-        sub = dbimpl.Subscription(feed, user)
-        for item in sub.get_rated_posts():
-            item.age()
+    def invoke(self, username):
+        # we're doing the whole aging of posts in SQL, hoping that this
+        # will be faster than the old approach.
+        dbimpl.update("""
+          update rated_posts
+            set points = (prob * 1000.0) / log(
+              case when extract(epoch from age(pubdate)) <= 0 then 3600
+                   else extract(epoch from age(pubdate))
+              end)
+            from posts
+            where username = %s and id = post
+        """, (username, ))
         dbimpl.conn.commit()
             
 class PurgePosts:
@@ -426,7 +432,7 @@ msg_dict = {
     "PurgePosts" : PurgePosts(),
     "CheckFeed" : CheckFeed(),
     "RecalculateSubscription" : RecalculateSubscription(),
-    "AgeSubscription" : AgeSubscription(),
+    "AgeSubscriptions" : AgeSubscriptions(),
     "RemoveDeadFeeds" : RemoveDeadFeeds(),
     "RecalculateAllPosts" : RecalculateAllPosts(),
     "PurgeFeed" : PurgeFeed(),
