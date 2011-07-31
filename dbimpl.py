@@ -1,15 +1,8 @@
 
-# TODO
-
-# - extensive test
-#   - weeding out of nits etc
-
-# - operation to remove users
-
-import datetime, hashlib, smtplib
+import datetime, hashlib, smtplib, marshal, os
 import psycopg2, sysv_ipc
 import psycopg2.extensions
-import feedlib
+import feedlib, vectors
 from config import *
 
 try:
@@ -338,6 +331,23 @@ class Item(feedlib.Post):
         return query_for_value("""select post from read_posts
                                   where username = %s and post = %s""",
                                (user.get_username(), self._id))
+
+    def get_vector(self):
+        filename = os.path.join(VECTOR_CACHE_DIR, str(self.get_local_id()))
+        try:            
+            inf = open(filename, "r")
+            vector = vectors.Vector(marshal.load(inf))
+            inf.close()
+        except IOError, e:
+            if e.errno != 2:
+                raise e
+            
+            vector = feedlib.Post.get_vector(self)
+            outf = open(filename, "w")
+            marshal.dump(vector.get_map(), outf)
+            outf.close()
+            
+        return vector
     
 class Subscription(feedlib.Subscription):
 

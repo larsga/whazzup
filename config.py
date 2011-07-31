@@ -12,7 +12,10 @@ DBM_DIR = 'dbms/'
 DB_CONNECT_STRING = 'dbname=whazzup'
 
 # key number for sysv_ipc message queue
-QUEUE_NUMBER = 6330
+QUEUE_NUMBER = 6331
 
 # where to put queue statistics reports
 STATS_DIR = '.'
+
+# where to put the vector cache (marshal files)
+VECTOR_CACHE_DIR = '.'
