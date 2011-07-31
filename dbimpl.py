@@ -327,6 +327,13 @@ class Item(feedlib.Post):
         update("delete from posts where id = %s", (self._id, ))
         conn.commit()
 
+        filename = os.path.join(VECTOR_CACHE_DIR, str(self.get_local_id()))
+        try:
+            os.unlink(filename)
+        except OSError, e:
+            if e.errno != 2:
+                raise e
+
     def is_seen(self, user):
         return query_for_value("""select post from read_posts
                                   where username = %s and post = %s""",
