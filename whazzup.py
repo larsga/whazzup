@@ -36,6 +36,7 @@ urls = (
     '/notify', 'Notify',
     '/faq', 'FAQ',
     '/stats', 'Stats',
+    '/reset-password', 'ResetPassword',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -290,6 +291,18 @@ class Error:
 class FAQ:
     def GET(self):
         return render.faq()
+
+class ResetPassword:
+    def POST(self):
+        email = web.input()["email"]
+        if not email:
+            return "<p>Must specify email"
+
+        username = users.find_user(email)
+        password = feedlib.generate_password()
+        users.set_password(username, password)
+        controller.send_user_password(username, email, password)
+        return "<p>Your password has been reset. You will receive it by email."
     
 class AddFave:
     def POST(self):        
@@ -440,7 +453,7 @@ class DeleteUser:
 
     def POST(self, key):
         controller.delete_user(key)
-
+        
 # --- ADMIN PAGES
 
 def admin_only(user):

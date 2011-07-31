@@ -6,7 +6,7 @@
 
 # - operation to remove users
 
-import datetime, hashlib
+import datetime, hashlib, smtplib
 import psycopg2, sysv_ipc
 import psycopg2.extensions
 import feedlib
@@ -75,6 +75,24 @@ class Controller(feedlib.Controller):
     def unsubscribe(self, feedid, user):
         sub = user.get_subscription(feedid)
         sub.unsubscribe()
+
+    def send_user_password(self, username, email, password):
+        conn = smtplib.SMTP()
+        conn.connect()
+        conn.sendmail("whazzup@garshol.priv.no", [email],
+"""From: Whazzup <whazzup@garshol.priv.no>
+Subject: New password for your Whazzup account
+
+Someone has just requested that your password at Whazzup be reset.
+To log in, go to http://whazzup.garshol.priv.no/ and log in with
+
+  username: %s
+  password: %s
+
+-- 
+Whazzup sysadmin daemon
+""" % (username, password))
+        conn.quit()
 
 class FeedDatabase(feedlib.Database):
 
@@ -462,6 +480,9 @@ class WordDatabase(feedlib.WordDatabase):
         
 # ----- FAKING USER ACCOUNTS
 
+def crypt(password):
+    return hashlib.md5(password).hexdigest()
+
 class UserDatabase:
 
     def get_current_user(self):
@@ -485,15 +506,25 @@ class UserDatabase:
                                     username = %s""", (username, ))
 
     def verify_credentials(self, username, password):
-        passhash = hashlib.md5(password).hexdigest()
+        passhash = crypt(password)
         return query_for_value("""select username from users where
                                     username = %s and password = %s""",
                                (username, passhash))
 
     def create_user(self, username, password, email):
-        passhash = hashlib.md5(password).hexdigest()
+        passhash = crypt(password)
         update("insert into users values (%s, %s, %s)",
                (username, passhash, email))
+        conn.commit()
+
+    def find_user(self, email):
+        return query_for_value("select username from users where email = %s",
+                               (email, ))
+
+    def set_password(self, username, password):
+        passhash = crypt(password)
+        update("update users set password = %s where username = %s",
+               (passhash, username))
         conn.commit()
 
 # ----- USER OBJECT

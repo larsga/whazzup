@@ -56,7 +56,16 @@ $if msg == "notify":
 
 <h2>Forgotten password?</h2>
 
-<p>FIXME: add email new password stuff here 
+<p><input type=submit value="Reset password"
+          onclick='document.getElementById("reset").className = "visible"'>
+</p>
+
+<div id="reset" class="hidden">
+  <form action="/reset-password" method="post">
+  Email: <input name=email><br>
+  <input type=submit value="Reset">
+  </form>
+</div>
 
 <h2>Don't have an account?</h2>
 

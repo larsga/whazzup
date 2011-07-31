@@ -1,6 +1,6 @@
 
 import time, vectors, operator, string, math, formatmodules, HTMLParser, rsslib
-import codecs, traceback, cgi, chew, datetime
+import codecs, traceback, cgi, chew, datetime, random
 from xml.sax import SAXException
 
 # --- Constants
@@ -105,6 +105,10 @@ def compute_max_posts(site):
     count = len(site.get_items())
     return int(max(min((count / (delta / 3600)) * 24 * 7 * 8, 300), 30))
 
+def generate_password():
+    alphabet = string.letters + string.digits
+    return "".join([random.choice(alphabet) for ix in range(8)])
+
 # --- Controller
 
 class Controller:
@@ -129,6 +133,9 @@ class Controller:
         raise NotImplementedError()
 
     def unsubscribe(self, feedid, user):
+        raise NotImplementedError()
+
+    def send_user_password(self, username, email, password):
         raise NotImplementedError()
 
 # --- Model
