@@ -11,7 +11,7 @@ $if not items and low == 0:
     subscribed to any feeds yet. Go to the <a href="/sites">feed list</a>
     to subscribe to some feeds.
      
-<table>
+<table style="counter-reset: story $(low)">
 $ ix = low
 $for item in items:
     <tr><td class=story>
