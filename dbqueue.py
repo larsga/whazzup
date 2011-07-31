@@ -450,11 +450,13 @@ import socket
 socket.setdefaulttimeout(20)
 
 stats = StatisticsCollector()
-start_sampler_task()
-startup_time = datetime.datetime.now()
+if __name__ == "__main__":
+    print "Starting up queue"
+    start_sampler_task()
+    startup_time = datetime.datetime.now()
 
-try:
-    queue_worker()
-except:
-    stop = True
-    raise
+    try:
+        queue_worker()
+    except:
+        stop = True
+        raise
