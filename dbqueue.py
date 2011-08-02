@@ -236,9 +236,9 @@ class RecalculateSubscription:
             
             rating = ratings.get(id)
             if not rating:
-                if not recalculate_old_posts:
-                    continue # this is an old post which is already calculated
                 rating = dbimpl.RatedPost(user, item, sub)
+            elif not recalculate_old_posts:
+                continue # this is an old post which is already calculated
             rating.recalculate()
             rating.save()
 
