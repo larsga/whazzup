@@ -192,12 +192,17 @@ class CheckFeed:
             dbimpl.cur.execute("""select username from subscriptions where
                                feed = %s""", (feed.get_local_id(), ))
             for (user, ) in dbimpl.cur.fetchall():
-                dbimpl.mqueue.send("RecalculateSubscription %s %s" %
+                # 0 means we don't recalculate old posts. scores
+                # haven't changed.  the only thing that's changed is
+                # that we have new posts, so we only calculate those.
+                dbimpl.mqueue.send("RecalculateSubscription %s %s 0" %
                                    (feed.get_local_id(), user))
 
 class RecalculateSubscription:
 
-    def invoke(self, feedid, username):
+    def invoke(self, feedid, username, recalculate_old_posts = True):
+        # recalculate_old_posts: if false, only new posts (for which no
+        # rated_post row exists) are calculated, saving time.
         feedid = int(feedid)
 
         user = dbimpl.User(username)
@@ -231,6 +236,8 @@ class RecalculateSubscription:
             
             rating = ratings.get(id)
             if not rating:
+                if not recalculate_old_posts:
+                    continue # this is an old post which is already calculated
                 rating = dbimpl.RatedPost(user, item, sub)
             rating.recalculate()
             rating.save()
