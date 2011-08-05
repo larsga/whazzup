@@ -115,7 +115,7 @@ class AgeSubscriptions:
         # will be faster than the old approach.
         dbimpl.update("""
           update rated_posts
-            set points = (prob * 1000.0) / log(
+            set points = (prob * 1000.0) / ln(
               case when extract(epoch from age(pubdate)) <= 0 then 3600
                    else extract(epoch from age(pubdate))
               end)
