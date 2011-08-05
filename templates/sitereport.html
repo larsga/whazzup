@@ -16,7 +16,7 @@ $if singleuser:
     </form>
 $else:
     <tr><th>Feed URL <td><a href="$(feed.get_url())">$(feed.get_url())</a>
-<tr><td>Last update <td>$(feed.nice_time_since_last_read()) ago
+    <tr><th>Last update <td>$(feed.nice_time_since_last_read()) ago
 </table>
 
 $if feed.get_error():
