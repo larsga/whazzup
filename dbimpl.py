@@ -444,6 +444,11 @@ class RatedPost(feedlib.RatedPost):
             print str(e)
 
         conn.commit()
+
+    def age(self):
+        self._points = feedlib.calculate_points(self.get_overall_probability(),
+                                                self._post.get_date())
+        self.save()
         
     def save(self):
         if self._exists_in_db:
@@ -460,10 +465,51 @@ class RatedPost(feedlib.RatedPost):
                     self._points, self._prob))
             self._exists_in_db = True
 
-    def age(self):
-        self._points = feedlib.calculate_points(self.get_overall_probability(),
-                                                self._post.get_date())
-        self.save()
+    def get_update_tuple(self):
+        return (self._points, self._prob, self._user.get_username(),
+                int(self._post.get_local_id()))
+
+    def get_insert_tuple(self):
+        return (self._user.get_username(),
+                int(self._post.get_local_id()),
+                int(self.get_subscription().get_feed().get_local_id()),
+                self._points, self._prob)
+
+def save_batch(objects):
+    """CLASS METHOD! Takes a list of RatedPost objects and writes
+    them to the database in a single batch SQL operation."""
+
+    insertbatch = []
+    updatebatch = []
+    # FIXME: we can probably make the flat list here directly with
+    # list comprehensions. skipping that for now.
+    for rating in objects:
+        if rating._exists_in_db:
+            insertbatch.append(rating.get_insert_tuple())
+        else:
+            updatebatch.append(rating.get_update_tuple())
+
+    if insertbatch:
+        query = "insert into rated_posts values %s"
+        values = ", ".join(["(%s, %s, %s, %s, now(), %s)"] *
+                            len(insertbatch))
+        query = query % values
+
+        insertvalues = [item for row in insertbatch for item in row]
+        cur.execute(query, insertvalues)
+
+    if updatebatch:
+        query = """update rated_posts
+                   set points = i.column1, last_recalc = now(),
+                       prob = i.column2
+                   from (values %s) as i
+                  where username = i.column3 and post = i.column4"""
+
+        values = ", ".join(["(%s, %s, %s, %s)"] * len(updatebatch))
+        query = query % values
+
+        updatevalues = [item for row in updatebatch for item in row]
+        cur.execute(query, updatevalues)
 
 # ----- WORD DATABASE
 
