@@ -18,4 +18,4 @@ QUEUE_NUMBER = 6331
 STATS_DIR = '.'
 
 # where to put the vector cache (marshal files)
-VECTOR_CACHE_DIR = '.'
+VECTOR_CACHE_DIR = '/tmp'

@@ -178,7 +178,7 @@ class CheckFeed:
             itemobj = dbimpl.Item(None, newitem.get_title(),
                                   newitem.get_link(), newitem.get_description(),
                                   parsed_date, newitem.get_author(), feed)
-            itemobj.save()
+            itemobj.save() # FIXME: we could use batch updates here, too
         
         # update feed row
         feed.set_title(site.get_title())
