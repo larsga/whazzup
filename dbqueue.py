@@ -229,20 +229,24 @@ class RecalculateSubscription:
           where username = %s and feed = %s
         """, (username, feedid))
 
+        batch = []
         for item in feed.get_items():
             id = int(item.get_local_id())
             if id in seen:
                 continue # user has already read item, nothing further to do
-            
+
             rating = ratings.get(id)
             if not rating:
                 rating = dbimpl.RatedPost(user, item, sub)
             elif not recalculate_old_posts:
                 continue # this is an old post which is already calculated
+            
             rating.recalculate()
-            rating.save()
+            batch.append(rating)
 
-        dbimpl.conn.commit()
+        if batch:
+            dbimpl.save_batch(batch)
+            dbimpl.conn.commit()
 
 class RecalculateAllPosts:
 
