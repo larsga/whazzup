@@ -485,9 +485,9 @@ def save_batch(objects):
     # list comprehensions. skipping that for now.
     for rating in objects:
         if rating._exists_in_db:
-            insertbatch.append(rating.get_insert_tuple())
-        else:
             updatebatch.append(rating.get_update_tuple())
+        else:
+            insertbatch.append(rating.get_insert_tuple())
 
     if insertbatch:
         query = "insert into rated_posts values %s"
