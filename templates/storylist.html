@@ -49,3 +49,7 @@ $if items:
             <a href="/$ix">$(ix + 1)</a>
     $if len(items) == 25:
         <a href="/$(page + 1)">next</a>
+
+    $ ids = ",".join([i.get_local_id() for i in items])
+    <p><a href="/mark-as-read/$ids"
+          title="Marks all items on this page as read">Mark as read</a>

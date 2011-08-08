@@ -40,8 +40,10 @@ def query_for_list(query, args):
 
 # ----- THE ACTUAL LOGIC
 
-# FIXME: ideally this class should be completely generic, so that only the
-# backend code differs between implementations. should be doable.
+# FIXME: ideally this class should be completely generic, so that only
+# the backend code differs between implementations. should be doable.
+# the question is whether that will necessitate installing another
+# layer of indirection, in which case, what's the point?
 
 class Controller(feedlib.Controller):
 
@@ -51,7 +53,12 @@ class Controller(feedlib.Controller):
     def vote_received(self, user, id, vote):
         # sending with higher priority so UI can be updated correctly
         mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote), 2)
-    
+
+    def mark_as_read(self, user, ids):
+        links = [user.get_rated_post_by_id(postid) for postid in ids]
+        for link in links:
+            link.seen()
+        
     def add_feed(self, url, user):
         feed = feeddb.add_feed(url)
         user.subscribe(feed)
