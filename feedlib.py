@@ -116,6 +116,9 @@ class Controller:
 
     def vote_received(self, user, id, vote):
         raise NotImplementedError()
+
+    def mark_as_read(self, user, ids):
+        raise NotImplementedError()
     
     def add_feed(self, url):
         raise NotImplementedError()

@@ -37,6 +37,7 @@ urls = (
     '/faq', 'FAQ',
     '/stats', 'Stats',
     '/reset-password', 'ResetPassword',
+    '/mark-as-read/(.+)', 'MarkAsRead',
 
     # app engine tasks
     '/task/check-feed/(.+)', 'TaskCheckFeed',
@@ -145,7 +146,10 @@ class PopularSites:
         
         feeds = feeddb.get_popular_feeds()
         return render.popular(feeds, user)
-    
+
+def get_return_url():
+    return web.ctx.env.get('HTTP_REFERER', web.ctx.homedomain + "/")
+
 class Vote:
     def GET(self, vote, id):
         nocache()
@@ -155,19 +159,19 @@ class Vote:
             return render.not_logged_in(users.create_login_url("/"))
 
         controller.vote_received(user, id, vote)
+        web.seeother(get_return_url())
 
-        referrer = web.ctx.env.get('HTTP_REFERER')
-        if referrer:
-            goto = referrer
-        else:
-            goto = web.ctx.homedomain + "/"
+class MarkAsRead:
+    def GET(self, ids):
+        nocache()
 
-        outf = open("/tmp/web.log", "a")
-        outf.write("%s -> %s\n" % (referrer, goto))
-        outf.close()
-            
-        web.seeother(goto)
+        user = users.get_current_user()
+        if not user:
+            return render.not_logged_in(users.create_login_url("/"))
 
+        controller.mark_as_read(user, ids.split(","))
+        web.seeother(get_return_url())
+        
 class ShowItem:
     def GET(self, id):
         nocache()
