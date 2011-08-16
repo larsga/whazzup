@@ -13,10 +13,6 @@ except ImportError:
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
-# ----- CONSTANTS
-
-ACCOUNT_LIMIT = 10
-
 # ----- UTILITIES
 
 def query_for_value(query, args = ()):
@@ -53,11 +49,6 @@ class Controller(feedlib.Controller):
     def vote_received(self, user, id, vote):
         # sending with higher priority so UI can be updated correctly
         mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote), 2)
-
-    def mark_as_read(self, user, ids):
-        links = [user.get_rated_post_by_id(postid) for postid in ids]
-        for link in links:
-            link.seen()
         
     def add_feed(self, url, user):
         feed = feeddb.add_feed(url)
@@ -566,7 +557,7 @@ class UserDatabase:
 
     def accounts_available(self):
         accounts = query_for_value("select count(*) from users", ())
-        return accounts < ACCOUNT_LIMIT
+        return accounts < MAX_USERS
 
     def set_session(self, session):
         self._session = session

@@ -1,32 +1,45 @@
 $def with (page, low, high, user)
 
+<script src="/static/voting.js"></script>
+
 <h1>What's up</h1>
 
 $var title_ = "page %s" % page
 $var url = "/"
-$ items = user.get_item_range(low, high)
+$ EXTRA = 5
+$ items = user.get_item_range(low, high + EXTRA)
 
 $if not items and low == 0:
     <p>You have no news. Probably this is because you haven't
     subscribed to any feeds yet. Go to the <a href="/sites">feed list</a>
     to subscribe to some feeds.
-     
-<table style="counter-reset: story $(low)">
-$ ix = low
+
+<div class=error id=error>This is where the error goes</div>
+      
+<table style="counter-reset: story $(low)" id="storytable">
+$ ix = 0
 $for item in items:
-    <tr><td class=story>
-    <td><a href="/vote/up/$(item.get_local_id())" title="Vote up"
+    <tr
+    $if ix + low >= high:
+        class=hidden
+        id=$(item.get_local_id())
+    ><td class=story>
+    <td><a href="javascript:vote('up', $ix, $(item.get_local_id()))" title="Vote up"
            ><img src=static/up.png border=0></a>
     <td><a href="/faveform/$(item.get_local_id())" title="Not in use"
            ><img src=static/star.png border=0></a>
     <td><a href="$(item.get_link())">$(item.get_title())</a>
 
-    <tr><td>
-    <td><a href="/vote/down/$(item.get_local_id())" title="Vote down"
+    <tr
+    $if ix + low >= high:
+        class=hidden
+    ><td>
+    <td><a href="javascript:vote('down', $ix, $(item.get_local_id()))" title="Vote down"
            ><img src=static/down.png border=0></a>
-    <td><a href="/vote/read/$(item.get_local_id())" title="Mark as read"
+    <td><a href="javascript:vote('read', $ix, $(item.get_local_id()))"
+           title="Mark as read"
            ><img src=static/read.png border=0></a>
-    <td style="font-size: 75%%; color: gray">
+    <td style="color: gray">
     $(item.get_site().get_title())
     $if item.get_author():
         , $(item.get_author())
@@ -50,6 +63,6 @@ $if items:
     $if len(items) == 25:
         <a href="/$(page + 1)">next</a>
 
-    $ ids = ",".join([i.get_local_id() for i in items])
-    <p><a href="/mark-as-read/$ids"
+    $ ids = ",".join([i.get_local_id() for i in items[ : 25]])
+    <p><a href="/mark-as-read/$ids" id="mark-as-read-link"
           title="Marks all items on this page as read">Mark as read</a>

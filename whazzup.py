@@ -147,9 +147,6 @@ class PopularSites:
         feeds = feeddb.get_popular_feeds()
         return render.popular(feeds, user)
 
-def get_return_url():
-    return web.ctx.env.get('HTTP_REFERER', web.ctx.homedomain + "/")
-
 class Vote:
     def GET(self, vote, id):
         nocache()
@@ -159,7 +156,9 @@ class Vote:
             return render.not_logged_in(users.create_login_url("/"))
 
         controller.vote_received(user, id, vote)
-        web.seeother(get_return_url())
+
+def get_return_url():
+    return web.ctx.env.get('HTTP_REFERER', web.ctx.homedomain + "/")
 
 class MarkAsRead:
     def GET(self, ids):
@@ -477,7 +476,7 @@ class Stats:
 # --- SETUP
         
 web.config.debug = False
-web.webapi.internalerror = web.debugerror
+#web.webapi.internalerror = web.debugerror
 
 try:
     from google.appengine.api import users

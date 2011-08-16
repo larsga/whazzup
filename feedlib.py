@@ -141,6 +141,12 @@ class Controller:
     def send_user_password(self, username, email, password):
         raise NotImplementedError()
 
+    def mark_as_read(self, user, ids):
+        # completely generic implementation, so...
+        links = [user.get_rated_post_by_id(postid) for postid in ids]
+        for link in links:
+            link.seen()
+
 # --- Model
 
 class Database:

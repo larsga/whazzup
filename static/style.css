@@ -3,10 +3,16 @@ td { vertical-align: top;
      padding-right: 0.6em }
 a { text-decoration: none }
 
-div.health {
+div.error, div.errorshow, div.sidebox {
     float: right;
     border: solid black 1pt;
     padding: 4pt;
+}
+div.error, div.errorshow {
+    color: red;
+}
+div.error {
+    display: none;
 }
 
 tr.error, tr.error a {
