@@ -137,6 +137,7 @@ class PurgeFeed:
         if not feed or not feed.get_max_posts():
             return
 
+        # FIXME: this could beneficially be turned into a batch operation
         items = feed.get_items()
         for ix in range(feed.get_max_posts(), len(items)):
             items[ix].delete()
