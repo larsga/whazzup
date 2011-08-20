@@ -151,6 +151,28 @@ class CheckFeed:
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
             return
+
+        feed_queue.send("%s %s" % (feedid, feed.get_url()))
+
+class RecordFeedError:
+
+    def invoke(self, feedid, *args):
+        error = " ".join(args)
+        feedid = int(feedid)
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
+        if not feed: # might have been gc-ed in the meantime
+            return
+
+        feed.set_error(error)
+        feed.save()
+
+class ParseFeed:
+    
+    def invoke(self, feedid):
+        feedid = int(feedid)
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
+        if not feed: # might have been gc-ed in the meantime
+            return
         
         items = {} # url -> item (so we can check for new ones)
         for item in feed.get_items():
@@ -158,9 +180,11 @@ class CheckFeed:
         
         # read xml
         try:
-            site = rsslib.read_feed(feed.get_url(), rsslib.DefaultFactory(),
-                                    rsslib.httplib_loader)
+            file = os.path.join(FEED_CACHE, "feed-%s.rss" % feedid)
+            site = rsslib.read_feed(file, rsslib.DefaultFactory(),
+                                    rsslib.urllib_loader)
             feed.set_error(None)
+            os.unlink(file)
         except Exception, e:
             # we failed, so record the failure and move on
             #traceback.print_exc()
@@ -300,8 +324,8 @@ class StatsReport:
         <h2>Queue stats</h2>
 
         <table>
-        <tr><th>Aspect <th>Average <th>Min <th>Max
-        <tr><td>Size   <td>%s      <td>%s  <td>%s
+        <tr><th>Aspect       <th>Average <th>Min <th>Max
+        <tr><td>Size         <td>%s      <td>%s  <td>%s
         </table>
 
         <h2>Task types</h2>
@@ -328,28 +352,18 @@ class StatsReport:
         outf.write("""
         </table>
         """)
+
+        outf.write("""
+        <h2>Feed downloading</h2>
+
+        <p>Queue size: %s</p>
+
+        <ol>
+        """ % feed_queue.get_queue_size())
+        for task in downloaders:
+            outf.write("<li>%s" % task.get_state())
+        outf.write("</ol>")
         outf.close()
-
-# ----- FEED DOWNLOADING THREAD
-
-class InMemoryMessageQueue:
-
-    def __init__(self):
-        self._messages = []
-
-    def send(self, msg):
-        self._messages.append(msg)
-
-    def receive(self):
-        if not self._messages:
-            return
-
-        msg = self._messages[0]
-        self._messages = self._messages[1 : ]
-        return msg
-
-    def get_queue_size(self):
-        return len(self._messages)
         
 # ----- STATISTICS COLLECTOR
 
@@ -399,7 +413,8 @@ class TaskStats:
         return self._sum
 
     def get_average(self):
-        return self._sum / self._count
+        if self._count:
+            return self._sum / self._count
 
     def get_max(self):
         return self._max
@@ -425,6 +440,111 @@ def start_sampler_task():
     thread = threading.Thread(target = sampler_task, name = "SamplerTask")
     thread.start()
 
+# ----- FEED DOWNLOADING THREAD
+
+class InMemoryMessageQueue:
+
+    def __init__(self):
+        self._messages = []
+        self._lock = threading.Lock()
+
+    def send(self, msg):
+        with self._lock:
+            self._messages.append(msg)
+
+    def receive(self):
+        if not self._messages:
+            return
+
+        with self._lock:
+            msg = self._messages[0]
+            self._messages = self._messages[1 : ]
+            return msg
+
+    def get_queue_size(self):
+        return len(self._messages)
+
+class FakeParser:
+    "Exists so that we can use the rsslib loader concept."
+
+    def __init__(self):
+        self._data = None
+
+    def feed(self, data):
+        self._data = data
+
+    def get_data(self):
+        return self._data
+
+class DownloaderTask:
+
+    def __init__(self, number):
+        self._number = number
+        self._state = "NOT STARTED"
+
+    def get_number(self):
+        return self._number
+        
+    def get_state(self):
+        return self._state
+        
+    def download(self):
+        try:
+            try:
+                self._download()
+            finally:
+                self._state = "DIED %s %s" % (sys.exc_info(), stop)
+        except:
+            self._state = "DIED %s %s" % (sys.exc_info(), stop)
+
+            print sys.exc_info()
+            tb = sys.exc_info()[2]
+            if not tb:
+                return
+            
+            traceback.print_tb(tb)
+            outf = open("traceback.txt", "w")
+            traceback.print_tb(tb, 1000, outf)
+            outf.close()
+        
+    def _download(self):
+        while not stop:
+            self._state = "CHECKING QUEUE"
+            msg = feed_queue.receive()
+            if not msg:
+                self._state = "WAITING"
+                time.sleep(0.1)
+                continue
+
+            self._state = "DOWNLOADING %s" % msg
+            tokens = msg.split()
+            feedid = tokens[0]
+            url = " ".join(tokens[1 : ]) # if space in URL
+
+            p = FakeParser()
+            try:
+                rsslib.httplib_loader(p, url)
+            except Exception, e:
+                # we failed, so record the failure and move on
+                #traceback.print_exc()
+                dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, str(e)))
+                continue
+
+            outf = open(os.path.join(FEED_CACHE, 'feed-%s.rss' % feedid), 'w')
+            outf.write(p.get_data())
+            outf.close()
+
+            dbimpl.mqueue.send("ParseFeed %s" % feedid)
+
+downloaders = [DownloaderTask(no + 1) for no in range(DOWNLOAD_THREADS)]
+def start_feed_downloading():    
+    for task in downloaders:
+        thread = threading.Thread(target = task.download,
+                                  name = "DownloadTask %s" % task.get_number())
+        thread.start()
+
+feed_queue = InMemoryMessageQueue()
+        
 # ----- CLEAN STOPPING
 
 stop = False
@@ -443,6 +563,8 @@ msg_dict = {
     "AgePosts" : AgePosts(),
     "PurgePosts" : PurgePosts(),
     "CheckFeed" : CheckFeed(),
+    "RecordFeedError" : RecordFeedError(),
+    "ParseFeed" : ParseFeed(),
     "RecalculateSubscription" : RecalculateSubscription(),
     "AgeSubscriptions" : AgeSubscriptions(),
     "RemoveDeadFeeds" : RemoveDeadFeeds(),
@@ -465,6 +587,7 @@ stats = StatisticsCollector()
 if __name__ == "__main__":
     print "Starting up queue"
     start_sampler_task()
+    start_feed_downloading()
     startup_time = datetime.datetime.now()
 
     try:
