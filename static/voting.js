@@ -12,8 +12,13 @@ function sendvote(action, id) {
     else
       msg = "" + xmlhttp.status + ": "  + xmlhttp.statusText + " (" +
             xmlhttp.readyState + ")"
+
     elem.childNodes[0].nodeValue = msg;
     elem.className = "errorshow";
+  } else {
+    // if the error was visible already, but this request went through
+    // we need to blank out the error display
+    elem.className = "error";
   }
 
   return status;

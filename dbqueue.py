@@ -497,12 +497,10 @@ class DownloaderTask:
         except:
             self._state = "DIED %s %s" % (sys.exc_info(), stop)
 
-            print sys.exc_info()
             tb = sys.exc_info()[2]
             if not tb:
                 return
             
-            traceback.print_tb(tb)
             outf = open("traceback.txt", "w")
             traceback.print_tb(tb, 1000, outf)
             outf.close()
