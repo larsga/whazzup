@@ -449,17 +449,23 @@ class InMemoryMessageQueue:
         self._lock = threading.Lock()
 
     def send(self, msg):
-        with self._lock:
+        try:
+            self._lock.acquire()
             self._messages.append(msg)
+        finally:
+            self._lock.release()
 
     def receive(self):
         if not self._messages:
             return
 
-        with self._lock:
+        try:
+            self._lock.acquire()
             msg = self._messages[0]
             self._messages = self._messages[1 : ]
             return msg
+        finally:
+            self._lock.release()
 
     def get_queue_size(self):
         return len(self._messages)
