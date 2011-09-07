@@ -5,15 +5,15 @@ $var title = "Stats"
 
 <h1>What's up &mdash; Stats</h1>
 
-$feeds = stats.get_feed_count()
-$subs = stats.get_subscription_count()
+$ feeds = stats.get_feed_count()
+$ subs = stats.get_subscription_count()
 
 <table>
 <tr><th>Users         <td>$(stats.get_user_count())
 <tr><th>Feeds         <td>$(feeds)
 <tr><th>Posts         <td>$(stats.get_post_count())      
 <tr><th>Subscriptions <td>$(subs)
-                          &mdash; $(int((feeds / subs) * 1000) / 1000.0) %
+                          ($(int((feeds / float(subs)) * 1000) / 1000.0) %)
 <tr><th>Rated posts   <td>$(stats.get_rated_posts_count())
 <tr><th>Read posts    <td>$(stats.get_read_posts_count())
 <tr><th>Notifications <td>$(stats.get_notification_count())      
