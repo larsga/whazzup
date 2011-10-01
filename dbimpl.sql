@@ -8,6 +8,7 @@ create table feeds (
   time_to_wait int not null,
   last_read timestamp,
   last_error timestamp,
+  time_added timestamp not null default now(),
   max_posts int
 );
 
