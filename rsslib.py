@@ -4,8 +4,6 @@ RSS files into an RSS data structure and it can dump the data structure
 back out as an RSS file.'
 
 Supports both RSS 0.90 and 0.91.
-
-$Id: rsslib.py,v 1.9 2010/06/08 16:19:57 larsga Exp $
 """
 
 import string, urlparse, urllib2, httplib
@@ -293,8 +291,14 @@ def httplib_loader(parser, url):
     # instead of the feed URL.
 
     assert (url.startswith("http://") or url.startswith("https://")), "Bad URL: " + repr(url)
-    pos = url.find("/", 7)
-    netloc = url[7 : pos]
+
+    if url.startswith("http://"):
+        start = 7
+    else:
+        start = 8
+    
+    pos = url.find("/", start)
+    netloc = url[start : pos]
     path = url[pos : ]
 
     parts = netloc.split(":")
