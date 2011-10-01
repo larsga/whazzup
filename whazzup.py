@@ -499,6 +499,7 @@ controller = module.controller
 feeddb = module.feeddb
 
 web.config.session_parameters['cookie_path'] = '/'
+web.config.session_parameters['max_age'] = (24 * 60 * 60) * 30 # 30 days
 
 app = web.application(urls, globals(), autoreload = False)
 app.internalerror = Error
