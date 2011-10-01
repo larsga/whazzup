@@ -47,3 +47,7 @@ td.story:before {
     counter-increment: story;
     content: counter(story) ".";
 }
+
+td.seen {
+    font-style: italic;
+}
