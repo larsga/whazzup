@@ -51,3 +51,28 @@ function vote(action, index, id) {
     window.location.reload();                      
   }
 }
+
+function vote2(action, index, id) {
+  if (!sendvote(action, id)) {
+    return; // problem already reported by sendvote
+  }
+
+  var elem = document.getElementById("storytable");
+  var rows = elem.getElementsByTagName("tr");
+
+  var row = rows[index * 2];
+  var cells = row.getElementsByTagName("td");
+  clear(cells[1]);
+  clear(cells[2]);
+  cells[3].className = "seen";
+
+  row = rows[index * 2 + 1];
+  cells = row.getElementsByTagName("td");
+  clear(cells[1]);
+  clear(cells[2]);
+}
+
+function clear(element) {
+  for (ix = element.childNodes.length - 1; ix >= 0; ix--)
+    element.removeChild(element.childNodes[ix]);
+}
