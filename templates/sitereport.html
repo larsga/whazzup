@@ -1,0 +1,66 @@
+$def with (feed, appengine, singleuser, user)
+
+<script src="/static/voting.js"></script>
+
+$var title = feed.get_title()
+$var url = "/site/whatever"
+
+<h1>Site: $(feed.get_title())</h1>
+
+<div class=error id=error> </div>
+
+<table>
+<tr><th>Homepage <td><a href="$(feed.get_link())">$(feed.get_link())</a>
+$if singleuser:
+    <form method=post action=/update-site/$(feed.get_local_id())>
+    <tr><th>Feed URL <td><input name=feedurl value="$(feed.get_url())" size=80>
+    <tr><th>Time to wait <td><input name=time value=$(feed.get_time_to_wait())>
+    
+    <tr><td colspan=2><input type=submit value="Set">
+    </form>
+$else:
+    <tr><th>Feed URL <td><a href="$(feed.get_url())">$(feed.get_url())</a>
+    <tr><th>Last update <td>$(feed.nice_time_since_last_read()) ago
+</table>
+
+$if feed.get_error():
+    <h2 style="color: red">Error</h2>
+    <pre>$(feed.get_error())</pre>
+
+<p>&nbsp;</p>
+    
+<table id="storytable">
+$ ix = 1
+$for item in feed.get_items():
+    <tr><td>$(ix).
+    $ seen = item.is_seen(user)
+    $if seen:
+        $ klass = ' class=seen'
+    $else:
+        $ klass = ''
+
+    $ id = item.get_local_id()
+    $if not seen:
+        $ votebutton = '<td><a href="javascript:vote2(\'%s\', %s, \'%s\')"><img src=/static/%s.png></a>'
+    $else:
+        $ votebutton = '<td><!-- %s %s %s %s -->'
+          
+    $:(votebutton % ("up", ix - 1, id, "up"))
+    $if not seen:
+        <td><a href="/faveform/$(id)"><img src=/static/star.png></a>
+    $else:
+        <td>
+    <td $klass><a href="$(item.get_link())">$(item.get_title())</a>
+
+    <tr><td>
+    $:(votebutton % ("down", ix - 1, id, "down"))
+    $:(votebutton % ("read", ix - 1, id, "read"))
+    <td style="font-size: 80%; color: gray">
+    $(item.get_site().get_title())
+    $if item.get_author():
+         , $(item.get_author())
+    <a href="/item/$(item.get_local_id())" style="color: inherit">[*]</a>,
+    $(item.nice_age())
+    $ ix += 1
+                        
+</table>
