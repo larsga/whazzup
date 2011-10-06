@@ -508,6 +508,7 @@ class DownloaderTask:
                 return
             
             outf = open("traceback.txt", "w")
+            outf.write(str(sys.exc_info()) + "\n")
             traceback.print_tb(tb, 1000, outf)
             outf.close()
         
