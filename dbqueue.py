@@ -157,7 +157,7 @@ class CheckFeed:
 class RecordFeedError:
 
     def invoke(self, feedid, *args):
-        error = " ".join(args)
+        error = " ".join(args) or "No error message"
         feedid = int(feedid)
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
@@ -499,16 +499,16 @@ class DownloaderTask:
             try:
                 self._download()
             finally:
-                self._state = "DIED %s %s" % (sys.exc_info(), stop)
+                self._state = "DIED %s %s" % (sys.exc_info()[1], stop)
         except:
-            self._state = "DIED %s %s" % (sys.exc_info(), stop)
+            self._state = "DIED %s %s" % (sys.exc_info()[1], stop)
 
             tb = sys.exc_info()[2]
             if not tb:
                 return
             
             outf = open("traceback.txt", "w")
-            outf.write(str(sys.exc_info()) + "\n")
+            outf.write(str(sys.exc_info()[1]) + "\n")
             traceback.print_tb(tb, 1000, outf)
             outf.close()
         
@@ -533,6 +533,11 @@ class DownloaderTask:
                 # we failed, so record the failure and move on
                 #traceback.print_exc()
                 dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, str(e)))
+                continue
+
+            if not p.get_data():
+                # if we didn't get anything then we can stop right here
+                dbimpl.mqueue.send("RecordFeedError %s No data" % feedid)
                 continue
 
             outf = open(os.path.join(FEED_CACHE, 'feed-%s.rss' % feedid), 'w')
