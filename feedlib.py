@@ -60,7 +60,7 @@ def compute_average(probs):
     return sum / float(len(probs))
 
 def strptime(str, format):
-    return datetime.datetime(*(time.strptime(str, format)[0:6]))
+    return datetime.datetime.strptime(str, format)
 
 def parse_date(datestring):
     if datestring:
