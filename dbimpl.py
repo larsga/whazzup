@@ -698,8 +698,9 @@ class SendingMessageQueue:
                     print "Ooops, busy"
                     break
 
-            self._internal_queue = self._internal_queue[pos : ]
-            print "Truncated queue", self._internal_queue
+            if pos:
+                self._internal_queue = self._internal_queue[pos : ]
+                print "Truncated queue", self._internal_queue
         
         try:
             self._send(msg, priority)
