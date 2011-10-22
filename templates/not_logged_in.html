@@ -11,7 +11,21 @@ li    { margin-bottom: 8pt }
 
 <h1>What's up?</h1>
 
-<div class=sidebox><a href="$:loginurl">Log in or sign up</a></div>
+<div class=sidebox>
+<form action="/login-handler" method="post">
+<table>
+<tr><th>Username
+    <td><input name=username>
+<tr><th>Password
+    <td><input name=password type=password>
+<tr><td colspan=2><input type=submit value="Log in">
+</table>
+</form>
+
+<p style="font-size: 10pt">
+<a href="$:loginurl">Sign up</a><br>
+<a href="$:loginurl">Forgotten password</a>
+</p></div>
 
 <div id="container">
 <p>This is a newsreader that learns what you are interested in, and
