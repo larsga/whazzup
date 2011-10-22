@@ -157,7 +157,7 @@ class CheckFeed:
 class RecordFeedError:
 
     def invoke(self, feedid, *args):
-        error = " ".join(args)
+        error = " ".join(args) or "No error message"
         feedid = int(feedid)
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
@@ -534,7 +534,7 @@ class DownloaderTask:
                 #traceback.print_exc()
                 dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, str(e)))
                 continue
-
+            
             outf = open(os.path.join(FEED_CACHE, 'feed-%s.rss' % feedid), 'w')
             outf.write(p.get_data())
             outf.close()
