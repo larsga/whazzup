@@ -532,7 +532,10 @@ class DownloaderTask:
             except Exception, e:
                 # we failed, so record the failure and move on
                 #traceback.print_exc()
-                dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, str(e)))
+                error = str(e)
+                if len(error) > 200:
+                    error = error[ : 200]
+                dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, error))
                 continue
 
             if not p.get_data():
