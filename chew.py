@@ -329,7 +329,7 @@ def extract_terms(text):
     terms = []
     for orgterm in string.split(text):
         term = orgterm
-        while term and term[0] in u"\\<'(\"[ {\xb7-%\u201c\u2018\u00AB":
+        while term and term[0] in u"\\<'(\"[ {\xb7-%\u201c\u2018\u00AB\u201d":
             term = term[1 : ]
         while term and term[-1] in u"\\>').,\"':;!]? |}*\xb7-%\u201d\u2019\u00BB":
             term = term[ : -1]
