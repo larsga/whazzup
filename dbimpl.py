@@ -225,7 +225,6 @@ class Feed(feedlib.Feed):
         elif len(self._title) > 100:
             self._title = self._title[ : 100] # we just truncate
 
-
         if self._error and len(self._error) > 100:
             self._error = self._error[ : 100]
             
@@ -309,7 +308,12 @@ class Item(feedlib.Post):
         if len(self._title) > 200:
             self._title = self._title[ : 200]
         if len(self._link) > 400:
-            print "Link:", len(self._link)
+            # This link is too long, and there's not a whole lot we can
+            # do about it. Solution: just drop the whole post, with a
+            # little warning. Can't really do anything else.
+            print "Link from feed %s, length %s" % (self._feed.get_local_id(),
+                                                    len(self._link))
+            return
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
 
