@@ -60,7 +60,9 @@ def compute_average(probs):
     return sum / float(len(probs))
 
 def strptime(str, format):
-    return datetime.datetime.strptime(str, format)
+    # this doesn't work on the server, because of missing strptime method
+    # return datetime.datetime.strptime(str, format)
+    return datetime.datetime(*(time.strptime(str, format)[0:6]))
 
 def parse_date(datestring):
     if datestring:
