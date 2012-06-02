@@ -192,6 +192,16 @@ class RecordFeedError:
         feed.set_error(error)
         feed.save()
 
+class FeedChecked:
+    def invoke(self, feedid):
+        feedid = int(feedid)
+        feed = dbimpl.feeddb.get_feed_by_id(feedid)
+        if not feed: # might have been gc-ed in the meantime
+            return
+
+        feed.is_read_now()
+        feed.save()
+        
 class ParseFeed:
     
     def invoke(self, feedid, lastmod):
@@ -561,8 +571,10 @@ class DownloaderTask:
 
             if data is None:
                 # this means the feed hasn't changed. that again means we
-                # don't need to do anything.
-                continue
+                # don't need to do anything, except update the time checked.
+                # we need to do that in the main message queue, to avoid
+                # race conditions on the database connection.
+                dbimpl.mqueue.send("FeedChecked %s" % feedid)
             if not data:
                 # if we didn't get anything then we can stop right here
                 dbimpl.mqueue.send("RecordFeedError %s No data" % feedid)
@@ -687,6 +699,7 @@ msg_dict = {
     "PurgeFeed" : PurgeFeed(),
     "RecordVote" : RecordVote(),
     "StatsReport" : StatsReport(),
+    "FeedChecked" : FeedChecked(),
     }
 recv_mqueue = IPCReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
