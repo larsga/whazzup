@@ -100,7 +100,7 @@ class FeedDatabase(feedlib.Database):
               returning id
             """, (url, ))
 
-        return Feed(feedid, None, url, None, None, None, None, None, None)
+        return Feed(feedid, None, url, None, None, None, None, None, None, None)
 
     def get_item_by_id(self, itemid):
         itemid = int(itemid)
@@ -124,14 +124,15 @@ class FeedDatabase(feedlib.Database):
         # may consider using sum of ratios for sorting instead of the count
         # of subscribers
         # sum((up + 5) / cast((up + down + 10) as float))
-        cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, count(username) as subs
+        cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, lastmod, count(username) as subs
                        from feeds
                        join subscriptions on id = feed
                        group by id, title, last_read, xmlurl, htmlurl, max_posts
                        order by subs desc limit 50""")
         return [Feed(feedid, title, xmlurl, htmlurl, None, None, lastread, None,
-                     maxposts, subs)
-                for (feedid, title, xmlurl, htmlurl, lastread, maxposts, subs)
+                     maxposts, lastmod, subs)
+                for (feedid, title, xmlurl, htmlurl, lastread, maxposts, subs,
+                     lastmod)
                 in cur.fetchall()]
 
     def get_user_count(self):
@@ -158,7 +159,7 @@ class FeedDatabase(feedlib.Database):
 class Feed(feedlib.Feed):
 
     def __init__(self, id, title, xmlurl, htmlurl, error, timetowait,
-                 lastread, lasterror, maxposts, subs = None):
+                 lastread, lasterror, maxposts, lastmod, subs = None):
         self._id = id
         self._title = title
         self._url = xmlurl
@@ -169,6 +170,7 @@ class Feed(feedlib.Feed):
         self._time_to_wait = timetowait
         self._maxposts = maxposts
         self._subs = subs
+        self._lastmod = lastmod
 
     def get_local_id(self):
         return str(self._id)
@@ -229,10 +231,11 @@ class Feed(feedlib.Feed):
             self._error = self._error[ : 100]
             
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
-                                   error = %s, last_error = %s, max_posts = %s
+                                   error = %s, last_error = %s, max_posts = %s,
+                                   last_modified = %s
                   where id = %s""",
                (self._title, self._link, self._lastread, self._error,
-                self._lasterror, self._maxposts, self._id))
+                self._lasterror, self._maxposts, self._lastmod, self._id))
         conn.commit()
 
     def get_max_posts(self):
@@ -248,6 +251,12 @@ class Feed(feedlib.Feed):
         "Seconds to wait between each time we poll the feed."
         return self._time_to_wait
 
+    def set_last_modified(self, lastmod):
+        self._lastmod = lastmod
+
+    def get_last_modified(self):
+        return self._lastmod
+        
     def is_subscribed(self, user):
         return query_for_value("""select username from subscriptions
                                   where username = %s and feed = %s""",
@@ -607,17 +616,17 @@ class User(feedlib.User):
     def get_feeds(self):
         cur.execute("""
           select id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
-                 last_error, max_posts, up, down
+                 last_error, max_posts, lastmod, up, down
           from feeds
           join subscriptions on id = feed
           where username = %s
         """, (self._username, ))
         subs = [Subscription(Feed(id, title, xmlurl, htmlurl, error,
                                   time_to_wait, last_read, last_error,
-                                  maxposts),
+                                  maxposts, lastmod),
                              self, up, down)
                 for (id, title, xmlurl, htmlurl, error, time_to_wait,
-                     last_read, last_error, maxposts, up, down)
+                     last_read, last_error, maxposts, lastmod, up, down)
                 in cur.fetchall()]
         subs = feedlib.sort(subs, Subscription.get_ratio)
         subs.reverse()
@@ -685,7 +694,8 @@ class SendingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it does not already exist
-        self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER)
+        no = int(open("queue-no.txt").read())
+        self._mqueue = sysv_ipc.MessageQueue(no)
         # internal queue for holding messages which can't be sent because
         # the message queue was full
         self._internal_queue = []

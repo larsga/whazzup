@@ -1,5 +1,6 @@
 
 import threading, time, atexit, traceback, datetime, os, operator, sys
+import httplib, urlparse
 import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
@@ -8,12 +9,34 @@ from config import *
 
 # ----- RECEIVING MESSAGE QUEUE
 
+try:
+    os.unlink("queue-no.txt")
+except OSError, e:
+    if e.errno != 2:
+        raise e
+
 class IPCReceivingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it already exists
-        self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER, sysv_ipc.IPC_CREX,
-                                             0666)
+        for no in range(QUEUE_NUMBER_LOW, QUEUE_NUMBER_HIGH):
+            self._mqueue = None
+            try:
+                print "Trying queue number", no
+                self._mqueue = sysv_ipc.MessageQueue(no, sysv_ipc.IPC_CREX,
+                                                     0666)
+                outf = open("queue-no.txt", "w")
+                outf.write(str(no))
+                outf.close()
+                break
+            except sysv_ipc.ExistentialError:
+                print "  FAILED"
+                pass # we keep looking
+        
+        if not self._mqueue:
+            raise Exception("Couldn't find a free message queue key")
+        else:
+            print "Success:", no
 
         self._queue = [None, [], []] # one queue per type. 0 is blank
 
@@ -152,7 +175,10 @@ class CheckFeed:
         if not feed: # might have been gc-ed in the meantime
             return
 
-        feed_queue.send("%s %s" % (feedid, feed.get_url()))
+        url = feed.get_url()
+        lastmod = feed.get_last_modified()
+        
+        feed_queue.send((feedid, url, lastmod))
 
 class RecordFeedError:
 
@@ -168,8 +194,12 @@ class RecordFeedError:
 
 class ParseFeed:
     
-    def invoke(self, feedid):
+    def invoke(self, feedid, lastmod):
         feedid = int(feedid)
+        lastmod = lastmod.replace('%', ' ')
+        if lastmod == "None":
+            lastmod = None
+        
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
             return
@@ -209,6 +239,7 @@ class ParseFeed:
         feed.set_title(site.get_title())
         feed.set_link(site.get_link())
         feed.set_max_posts(feedlib.compute_max_posts(site))
+        feed.set_last_modified(lastmod)
         feed.is_read_now()
         feed.save()
             
@@ -470,18 +501,6 @@ class InMemoryMessageQueue:
     def get_queue_size(self):
         return len(self._messages)
 
-class FakeParser:
-    "Exists so that we can use the rsslib loader concept."
-
-    def __init__(self):
-        self._data = None
-
-    def feed(self, data):
-        self._data = data
-
-    def get_data(self):
-        return self._data
-
 class DownloaderTask:
 
     def __init__(self, number):
@@ -501,13 +520,17 @@ class DownloaderTask:
             finally:
                 self._state = "DIED %s %s" % (sys.exc_info()[1], stop)
         except:
+            # from StringIO import StringIO
+            # io = StringIO()
+            # traceback.print_exception(sys.exc_type, sys.exc_value, sys.exc_traceback, 1000, io)
+            # print io.getvalue()
             self._state = "DIED %s %s" % (sys.exc_info()[1], stop)
 
             tb = sys.exc_info()[2]
             if not tb:
                 return
             
-            outf = open("traceback.txt", "w")
+            outf = open("traceback.txt", "a")
             outf.write(str(sys.exc_info()[1]) + "\n")
             traceback.print_tb(tb, 1000, outf)
             outf.close()
@@ -521,34 +544,113 @@ class DownloaderTask:
                 time.sleep(0.1)
                 continue
 
-            self._state = "DOWNLOADING %s" % msg
-            tokens = msg.split()
-            feedid = tokens[0]
-            url = " ".join(tokens[1 : ]) # if space in URL
+            self._state = "DOWNLOADING %s %s %s" % msg
+            (feedid, url, lastmod) = msg
 
-            p = FakeParser()
             try:
-                rsslib.httplib_loader(p, url)
+                (data, lastmod) = self._load(url, lastmod)
             except Exception, e:
                 # we failed, so record the failure and move on
                 #traceback.print_exc()
                 error = str(e)
                 if len(error) > 200:
                     error = error[ : 200]
+                    
                 dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, error))
                 continue
 
-            if not p.get_data():
+            if data is None:
+                # this means the feed hasn't changed. that again means we
+                # don't need to do anything.
+                continue
+            if not data:
                 # if we didn't get anything then we can stop right here
                 dbimpl.mqueue.send("RecordFeedError %s No data" % feedid)
                 continue
-
+            
             outf = open(os.path.join(FEED_CACHE, 'feed-%s.rss' % feedid), 'w')
-            outf.write(p.get_data())
+            outf.write(data)
             outf.close()
 
-            dbimpl.mqueue.send("ParseFeed %s" % feedid)
+            lastmod = str(lastmod).replace(" ", "%") # hack hack hack
+            dbimpl.mqueue.send("ParseFeed %s %s" % (feedid, lastmod))
 
+    def _load(self, url, lastmod):
+        # this is better than urllib_loader because it allows us more
+        # fine-grained control over the HTTP interaction.  we use this
+        # to handle redirects and send conditional GETs.
+
+        assert (url.startswith("http://") or url.startswith("https://")), "Bad URL: " + repr(url)
+
+        if url.startswith("http://"):
+            start = 7
+        else:
+            start = 8
+
+        pos = url.find("/", start)
+        netloc = url[start : pos]
+        path = url[pos : ]
+
+        parts = netloc.split(":")
+        if len(parts) == 1:
+            host = netloc
+            port = None # defaults depending on protocol
+        else:
+            (host, port) = parts
+            port = int(port)
+
+        if url.startswith("http://"):
+            conn = httplib.HTTPConnection(host, port or 80)
+        else:
+            conn = httplib.HTTPSConnection(host, port or 443)
+
+        headers = {}
+        if lastmod:
+            headers["If-Modified-Since"] = lastmod
+
+        conn.request("GET", path, None, headers)
+
+        resp = conn.getresponse()
+        if resp.status == 404:
+            raise Exception("404 Not Found")
+        elif resp.status >= 400:
+            raise Exception("%s %s" % (resp.status, resp.reason))
+        elif resp.status == 304:
+            # this means the feed hasn't changed
+            conn.close()
+            return (None, None)
+        elif resp.status >= 300:
+            # handle redirects
+            # FIXME: consider whether 302 should lead to a database update
+            location = resp.getheader("Location")
+            if location:
+                location = location.decode("iso-8859-1") # ensure both are unicode
+                location = urlparse.urljoin(url, location)
+                if location == url:
+                    print "Couldn't redirect any more..."
+                    return (None, None) # avoid infinite loops
+                location = escape_non_ascii(location)
+                return self._load(location, lastmod)
+
+            raise Exception("Error: redirect with no location header")
+
+        # FIXME: handle text/html responses
+
+        # here we cheat a little, in order to record the update time of
+        # the feed.
+        tuple = (resp.read(), resp.getheader("Last-Modified"))
+        conn.close()
+        return tuple
+
+def escape_non_ascii(url):
+    chars = []
+    for ch in url:
+        if ord(ch) > 127:
+            chars.append("%" + hex(ord(ch))[2 : ])
+        else:
+            chars.append(ch)
+    return "".join(chars)
+    
 downloaders = [DownloaderTask(no + 1) for no in range(DOWNLOAD_THREADS)]
 def start_feed_downloading():    
     for task in downloaders:
@@ -608,3 +710,5 @@ if __name__ == "__main__":
     except:
         stop = True
         raise
+
+os.unlink("queue-no.txt")

@@ -312,7 +312,7 @@ def httplib_loader(parser, url):
     if url.startswith("http://"):
         conn = httplib.HTTPConnection(host, port or 80)
     else:
-        conn = httplib.HTTPSConnection(host, port or 443) # FIXME: doesn't work
+        conn = httplib.HTTPSConnection(host, port or 443)
     conn.request("GET", path)
 
     resp = conn.getresponse()
@@ -335,9 +335,13 @@ def httplib_loader(parser, url):
         
     # FIXME: handle text/html responses
 
+    # here we cheat a little, in order to record the update time of
+    # the feed.
+    parser._update_time = resp.getheader("Last-Modified")
+    
     parser.feed(resp.read())
     conn.close()
-    
+
 def read_xml(url, handler, data_loader = urllib_loader):
     p = make_parser()
     p.setContentHandler(handler)
