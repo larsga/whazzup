@@ -124,7 +124,7 @@ class FeedDatabase(feedlib.Database):
         # may consider using sum of ratios for sorting instead of the count
         # of subscribers
         # sum((up + 5) / cast((up + down + 10) as float))
-        cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, lastmod, count(username) as subs
+        cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, last_modified, count(username) as subs
                        from feeds
                        join subscriptions on id = feed
                        group by id, title, last_read, xmlurl, htmlurl, max_posts
@@ -616,7 +616,7 @@ class User(feedlib.User):
     def get_feeds(self):
         cur.execute("""
           select id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
-                 last_error, max_posts, lastmod, up, down
+                 last_error, max_posts, last_modified, up, down
           from feeds
           join subscriptions on id = feed
           where username = %s
