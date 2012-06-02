@@ -9,7 +9,8 @@ create table feeds (
   last_read timestamp,
   last_error timestamp,
   time_added timestamp not null default now(),
-  max_posts int
+  max_posts int,
+  last_modified varchar(50) -- "last-modified" header as reported by server
 );
 
 create table posts (

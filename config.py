@@ -12,7 +12,8 @@ DBM_DIR = 'dbms/'
 DB_CONNECT_STRING = 'dbname=whazzup'
 
 # key number for sysv_ipc message queue
-QUEUE_NUMBER = 6332
+QUEUE_NUMBER_LOW = 6300
+QUEUE_NUMBER_HIGH = 6500
 
 # where to put queue statistics reports
 STATS_DIR = '.'
