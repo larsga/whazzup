@@ -51,14 +51,7 @@ class Controller(feedlib.Controller):
         mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote), 2)
         
     def add_feed(self, url, user):
-        feed = feeddb.add_feed(url)
-        user.subscribe(feed)
-
-        # make it all permanent
-        conn.commit()
-
-        # tell queue worker to check this feed
-        mqueue.send("CheckFeed %s" % feed.get_local_id())
+        mqueue.send("AddFeed %s %s" % (user, url))
 
     def recalculate_all_posts(self, user):
         mqueue.send("RecalculateAllPosts %s" % user.get_username())
@@ -66,6 +59,8 @@ class Controller(feedlib.Controller):
     def unsubscribe(self, feedid, user):
         sub = user.get_subscription(feedid)
         sub.unsubscribe()
+        # make it all permanent
+        conn.commit()
 
     def send_user_password(self, username, email, password):
         conn = smtplib.SMTP()
