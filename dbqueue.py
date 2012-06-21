@@ -1,6 +1,6 @@
 
 import threading, time, atexit, traceback, datetime, os, operator, sys
-import httplib, urlparse
+import httplib, urlparse, gzip, StringIO, errno
 import sysv_ipc
 import rsslib, feedlib
 # importing dbimpl further down
@@ -12,7 +12,7 @@ from config import *
 try:
     os.unlink("queue-no.txt")
 except OSError, e:
-    if e.errno != 2:
+    if e.errno != errno.ENOENT: # no such file
         raise e
 
 class IPCReceivingMessageQueue:
@@ -405,6 +405,24 @@ class StatsReport:
             outf.write("<li>%s" % task.get_state())
         outf.write("</ol>")
         outf.close()
+
+class AddFeed:
+
+    def invoke(self, username, *urltokens):
+        url = " ".join(urltokens)
+
+        # check the URL before we do anything more
+
+        # ok, now we can go ahead and add it
+        user = dbimpl.User(username)
+        feed = dbimpl.feeddb.add_feed(url)
+        user.subscribe(feed)
+
+        # make it all permanent
+        conn.commit()
+
+        # now we need to download the feed
+        mqueue.send("CheckFeed %s" % feed.get_local_id())
         
 # ----- STATISTICS COLLECTOR
 
@@ -575,6 +593,7 @@ class DownloaderTask:
                 # we need to do that in the main message queue, to avoid
                 # race conditions on the database connection.
                 dbimpl.mqueue.send("FeedChecked %s" % feedid)
+                continue
             if not data:
                 # if we didn't get anything then we can stop right here
                 dbimpl.mqueue.send("RecordFeedError %s No data" % feedid)
@@ -616,7 +635,7 @@ class DownloaderTask:
         else:
             conn = httplib.HTTPSConnection(host, port or 443)
 
-        headers = {}
+        headers = {"Host" : host}
         if lastmod:
             headers["If-Modified-Since"] = lastmod
 
@@ -648,9 +667,17 @@ class DownloaderTask:
 
         # FIXME: handle text/html responses
 
-        # here we cheat a little, in order to record the update time of
-        # the feed.
-        tuple = (resp.read(), resp.getheader("Last-Modified"))
+        body = resp.read()
+        # it's possible that the body is encoded somehow, e.g. with gzip
+        enc = resp.getheader("Content-Encoding")
+        if enc:
+            # we've only observed gzip so far, so only support that
+            assert enc == "gzip", "Unsupported content encoding: %s" % enc
+            gz = gzip.GzipFile(fileobj = StringIO.StringIO(body))
+            body = gz.read()
+            gz.close()
+        
+        tuple = (body, resp.getheader("Last-Modified"))
         conn.close()
         return tuple
 
@@ -700,6 +727,7 @@ msg_dict = {
     "RecordVote" : RecordVote(),
     "StatsReport" : StatsReport(),
     "FeedChecked" : FeedChecked(),
+    "AddFeed" : AddFeed(),
     }
 recv_mqueue = IPCReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
