@@ -10,7 +10,7 @@ from config import *
 # ----- RECEIVING MESSAGE QUEUE
 
 try:
-    os.unlink("queue-no.txt")
+    os.unlink(QUEUE_FILE)
 except OSError, e:
     if e.errno != errno.ENOENT: # no such file
         raise e
@@ -25,7 +25,7 @@ class IPCReceivingMessageQueue:
                 print "Trying queue number", no
                 self._mqueue = sysv_ipc.MessageQueue(no, sysv_ipc.IPC_CREX,
                                                      0666)
-                outf = open("queue-no.txt", "w")
+                outf = open(QUEUE_FILE, "w")
                 outf.write(str(no))
                 outf.close()
                 break
@@ -139,7 +139,7 @@ class AgeSubscriptions:
         dbimpl.update("""
           update rated_posts
             set points = (prob * 1000.0) / ln(
-              case when extract(epoch from age(pubdate)) <= 0 then 3600
+              case when extract(epoch from age(pubdate)) <= 3 then 3600
                    else extract(epoch from age(pubdate))
               end)
             from posts
@@ -752,4 +752,4 @@ if __name__ == "__main__":
         stop = True
         raise
 
-os.unlink("queue-no.txt")
+os.unlink(QUEUE_FILE)
