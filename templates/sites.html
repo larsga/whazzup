@@ -13,7 +13,7 @@ $if subs:
         <th>Posts
     $else:
         <th>Max posts
-        <th>Posts
+        $# <th>Posts (taken out as too slow, issue 62)
           
     <th>Score
     <th>Last checked
@@ -33,7 +33,8 @@ $if subs:
         <td><a href="site/$id">$(site.get_title())</a>
         $if not singleuser:
 	    <td>$(site.get_max_posts())
-        <td>$(site.get_item_count())
+            $# took this out, as it was too slow
+            $#<td>$(site.get_item_count())
         <td>$(sub.get_nice_ratio())
         <td>$(site.nice_time_since_last_read())
     $if singleuser:
