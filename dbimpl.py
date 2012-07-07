@@ -225,7 +225,9 @@ class Feed(feedlib.Feed):
 
         if self._error and len(self._error) > 100:
             self._error = self._error[ : 100]
-            
+        if self._link and len(self._link) > 200:
+            self._link = None # there have to be limits...
+
         update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
                                    error = %s, last_error = %s, max_posts = %s,
                                    last_modified = %s
@@ -690,7 +692,7 @@ class SendingMessageQueue:
 
     def __init__(self):
         # create queue, and fail if it does not already exist
-        no = int(open("queue-no.txt").read())
+        no = int(open(QUEUE_FILE).read())
         self._mqueue = sysv_ipc.MessageQueue(no)
         # internal queue for holding messages which can't be sent because
         # the message queue was full
@@ -725,7 +727,8 @@ class SendingMessageQueue:
             # this could be either because dbqueue was restarted (new instance
             # of queue) or because dbqueue is not running at all. we reopen
             # the queue and try again once.
-            self._mqueue = sysv_ipc.MessageQueue(QUEUE_NUMBER)
+            no = int(open(QUEUE_FILE).read())
+            self._mqueue = sysv_ipc.MessageQueue(no)
 
             # we retry. if it still fails we know dbqueue is not running and
             # there's no point in continuing to try.
