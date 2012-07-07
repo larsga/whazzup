@@ -1,0 +1,117 @@
+$def with (users, msg)
+
+$var title = None
+$var url = None
+
+<script>
+function validate() {
+  form = document.forms.signupform;
+  msg = document.getElementById("message").childNodes[0];
+
+  if (!(form.password.value && form.password2.value &&
+        form.username.value && form.email.value)) {
+    msg.data = "All fields must be filled in";
+    return false;
+  }
+                                   
+  if (form.password.value != form.password2.value) {
+    msg.data = "Passwords don't match";
+    return false;
+  }
+
+  if (form.username.value.length < 4) {
+    msg.data = "User name is too short (at least 4 characters)";
+    return false;
+  }
+
+  if (form.password.value.length < 6) {
+    msg.data = "Password is too short (at least 6 characters)";
+    return false;
+  }
+
+  return true;
+}
+</script>
+
+<h1>What's up</h1>
+
+$if msg == "failed":
+    <p style="color: red; font-weight: bold">Login failed. Try again.</p>
+$if msg == "created":
+    <p style="color: red; font-weight: bold">User created. You can
+    log in now.</p>
+$if msg == "notify":
+    <p style="color: red; font-weight: bold">We have stored your email
+    address, and will email you when more accounts become available.
+    Thank you!</p>
+<form action="/login-handler" method="post">
+<table>
+<tr><th>Username
+    <td><input name=username>
+<tr><th>Password
+    <td><input name=password type=password>
+<tr><td colspan=2><input type=submit value="Log in">
+</table>
+</form>
+
+<h2>Forgotten password?</h2>
+
+<p><input type=submit value="Reset password"
+          onclick='document.getElementById("reset").className = "visible"'>
+</p>
+
+<div id="reset" class="hidden">
+  <form action="/reset-password" method="post">
+  Email: <input name=email><br>
+  <input type=submit value="Reset">
+  </form>
+</div>
+
+<h2>Don't have an account?</h2>
+
+$if msg == "passwords":
+    <p style="color: red; font-weight: bold">Passwords did not match.</p>
+$if msg == "missing":
+    <p style="color: red; font-weight: bold">You must fill in all fields.</p>
+$if msg == "userexists":
+    <p style="color: red; font-weight: bold">That user already exists.</p>
+
+$if users.accounts_available():
+    <p><input type=submit value="Sign up"
+              onclick='document.getElementById("signup").className = "visible"'>
+    </p>
+
+    <div id="signup" class="hidden">
+    <form action="/signup" method="post" id="signupform">
+    <table>
+    <tr><th>Username
+        <td><input name=username>
+    <tr><th>Email
+        <td><input name=email>
+           (we promise <em>never</em> to give away your email)
+    <tr><th>Password
+        <td><input name=password type=password>
+    <tr><th>Password
+        <td><input name=password2 type=password>
+    <tr><td colspan=2><input type=submit onclick="return validate()"
+                             value="Create account">
+        <p style="color: red; font-weight: bold" id="message"> </p> 
+        
+    </table>
+    </form>
+    </div>
+      
+$else:
+    <p style="width: 50%">Unfortunately, we have all the users we can
+    handle at the moment, and so you cannot sign up for a new account
+    now. We will scale the service up to allow for more users in the
+    near future. Sorry about this.
+      
+    <p style="width: 50%">Sign up below to be notified when we open up
+    for more users.
+
+      <form action="/notify" method="post">
+        Email: <input name=email><br>
+        <input type=submit>
+      </form>
+      

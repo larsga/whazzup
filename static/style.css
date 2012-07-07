@@ -1,0 +1,53 @@
+body { font-family: Arial }
+td { vertical-align: top;
+     padding-right: 0.6em }
+a { text-decoration: none }
+
+div.error, div.errorshow, div.sidebox {
+    float: right;
+    border: solid black 1pt;
+    padding: 4pt;
+}
+div.error, div.errorshow {
+    color: red;
+}
+div.error {
+    display: none;
+}
+
+tr.error, tr.error a {
+    color: red;
+}
+
+th {
+    text-align: left;
+}
+
+div.topmenu {
+    float: right;
+}
+
+.hidden {
+    display: none
+}
+
+div.visible {
+    display: block;
+}
+
+span.menuitem:before {
+    content: " | ";
+}
+
+span.menuitem:first-child:before {
+    content: "";
+}
+
+td.story:before {
+    counter-increment: story;
+    content: counter(story) ".";
+}
+
+td.seen {
+    font-style: italic;
+}

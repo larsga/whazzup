@@ -1,0 +1,61 @@
+
+$var url = "/faq"
+$var title = "FAQ"
+
+<style>
+h2, p { width: 55% }
+</style>
+
+<h1>What's up &mdash; FAQ</h1>
+
+<h2><a name="notitle">Why are there [No title] feeds in my feed list?</a></h2>
+
+<p>If you've just added feeds, it's probably because the background
+  queue hasn't gotten around to processing them yet.
+
+<p>If the feed is red it's because the feed couldn't be loaded. The
+  reason could be that the URL is wrong, or something else. Click on
+  the feed to see the error message.
+
+<p>If none of the above explain the problem,
+  <a href="mailto:larsga@garshol.priv.no">send me an email</a> and
+  I'll have a look.
+
+<h2><a name="ranking">How does the ranking actually work?</a></h2>
+
+<p>There is a bit of background in
+  <a href="http://www.garshol.priv.no/blog/216.html">this blog
+  posting</a>. Also, if you want to know why a particular story has
+  been rated the way it has, click the "[*]" under the headline in the
+  story list. That will show the actual statistics, probabilities and
+  overall score for the story. I've found this very helpful in
+  learning what is going on "under the covers".
+
+<h2><a name="delay">Why don't my votes take effect
+    immediately?</a></h2>
+
+<p>The downloading of new stories and recalculation of scores all
+  happen in a background process working from a message queue, and
+  this queue can fill up at times. I'm working on making this part of
+  the system more responsive.
+  
+<h2><a name="languages">What languages are supported?</a></h2>
+
+<p>At the moment only English and Norwegian. Other languages also
+work, but not as well. Languages written without spaces (like Japanese
+and Chinese) are unlikely to work very well, unfortunately.
+<a href="http://code.google.com/p/whazzup/">Contributions</a> of
+support for more languages (stop word lists, tokenizers, and stemmers)
+are very welcome.
+
+<h2><a name="bugs">Where can I report bugs and request features?</a></h2>
+
+<p>Either by <a href="mailto:larsga@garshol.priv.no">email to me</a>
+  or in <a href="http://code.google.com/p/whazzup/issues/list">the
+    issue tracker</a>.
+
+<h2>Why isn't my question here?</h2>
+
+<p>Because nobody's asked it yet. Send an
+  <a href="mailto:larsga@garshol.priv.no">email to me</a>, and I'll
+  try to help.
