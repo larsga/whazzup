@@ -122,7 +122,8 @@ class FeedDatabase(feedlib.Database):
         cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, last_modified, count(username) as subs
                        from feeds
                        join subscriptions on id = feed
-                       group by id, title, last_read, xmlurl, htmlurl, max_posts
+                       group by id, title, last_read, xmlurl, htmlurl,
+                                max_posts, last_modified
                        order by subs desc limit 50""")
         return [Feed(feedid, title, xmlurl, htmlurl, None, None, lastread, None,
                      maxposts, lastmod, subs)
