@@ -66,6 +66,15 @@ def strptime(str, format):
 
 def parse_date(datestring):
     if datestring:
+        # there's a particular Russian format that needs to be supported:
+        # u'\u0441\u0431, 13 feb 2010 15:51:30 +0300' (issue 35)
+        # all Cyrillic characters in range 0x0400-0x04FF
+        if (len(datestring) == 30 and
+            0x0400 <= ord(datestring[0]) <= 0x04FF and
+            0x0400 <= ord(datestring[1]) <= 0x04FF and
+            datestring[2] == ','):
+            datestring = datestring[4 : -6] # cutoff, so strptime can handle
+        
         formats = [("%a, %d %b %Y %H:%M:%S", 24),
                    ("%Y-%m-%dT%H:%M:%S", 19),
                    ("%a, %d %b %Y %H:%M", 22),
@@ -75,7 +84,11 @@ def parse_date(datestring):
                    ("%a %b %d %H:%M:%S +0000 %Y", 30),
 
                    #Sun, 16 January 2011 07:13:33
-                   ("%a, %d %B %Y %H:%M:%S", 29)]
+                   ("%a, %d %B %Y %H:%M:%S", 29),
+
+                   # 06 Jul 2012 17:28:55 +0400
+                   ("%d %b %Y %H:%M:%S", 20),
+                   ]
         for (format, l) in formats:
             try:
                 return strptime(datestring[ : l], format)
