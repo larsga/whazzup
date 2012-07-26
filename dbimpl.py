@@ -51,12 +51,13 @@ class Controller(feedlib.Controller):
         mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote), 2)
         
     def add_feed(self, url, user):
-        mqueue.send("AddFeed %s %s" % (user, url))
+        mqueue.send("AddFeed %s %s" % (user, url), 2)
 
     def recalculate_all_posts(self, user):
         mqueue.send("RecalculateAllPosts %s" % user.get_username())
 
     def unsubscribe(self, feedid, user):
+        # FIXME: move this too into the message queue
         sub = user.get_subscription(feedid)
         sub.unsubscribe()
         # make it all permanent
