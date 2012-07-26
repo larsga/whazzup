@@ -37,9 +37,9 @@ $if subs:
             $#<td>$(site.get_item_count())
         <td>$(sub.get_nice_ratio())
         <td>$(site.nice_time_since_last_read())
-    $if singleuser:
-        <td>$(site.get_unread_count())
-        <td>$(site.is_being_read())
+        $if singleuser:
+            <td>$(site.get_unread_count())
+            <td>$(site.is_being_read())
     </table>
 $else:
     <p>You are not subscribed to any feeds yet. Please subscribe to a
