@@ -88,6 +88,9 @@ def parse_date(datestring):
 
                    # 06 Jul 2012 17:28:55 +0400
                    ("%d %b %Y %H:%M:%S", 20),
+
+                   # Sun, 30 Dec 2012 GMT
+                   ("%s, %d %b %Y", 16),
                    ]
         for (format, l) in formats:
             try:
