@@ -308,6 +308,11 @@ class RecalculateSubscription:
                 continue # this is an old post which is already calculated
             
             rating.recalculate()
+
+            # FIXME: implementing deduplication
+            # find all dupes of this story. find out which one has the
+            # highest rating. queue tasks to mark all the others as
+            # read.            
             batch.append(rating)
 
         if batch:
@@ -419,10 +424,10 @@ class AddFeed:
         user.subscribe(feed)
 
         # make it all permanent
-        conn.commit()
+        dbimpl.conn.commit()
 
         # now we need to download the feed
-        mqueue.send("CheckFeed %s" % feed.get_local_id())
+        dbimpl.mqueue.send("CheckFeed %s" % feed.get_local_id())
         
 # ----- STATISTICS COLLECTOR
 
