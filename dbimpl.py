@@ -369,6 +369,7 @@ class Item(feedlib.Post):
 class Subscription(feedlib.Subscription):
 
     def __init__(self, feed, user, up = None, down = None):
+        '''feed = Feed object, user = User object'''
         self._feed = feed
         self._user = user
         self._up = up
@@ -484,6 +485,28 @@ class RatedPost(feedlib.RatedPost):
                 int(self._post.get_local_id()),
                 int(self.get_subscription().get_feed().get_local_id()),
                 self._points, self._prob)
+
+    def find_dupes(self):
+        '''Returns RatedPost objects (for the same user) for other
+        Post objects ultimately representing the same story. The
+        objects are sorted by points, descending.'''
+
+        username = self._user.get_username()
+        cur.execute('''select p.id, p.feed
+                       from posts p
+                       join rated_posts r on p.id = r.post
+                       where r.username = %s and link = %s
+                       order by r.points desc''',
+                    (username, self.get_post().get_link()))
+
+        # id, title, link, descr, date, author, feed):
+        # user, post, subscription
+        dupes = []
+        for (id, feed) in cur.fetchall():
+            feed = feeddb.get_feed_by_id(feed)
+            post = Item(id, None, None, None, None, None, feed)
+            dupes.append(RatedPost(username, post, Subscription(feed, self._user)))
+        return dupes
 
 def save_batch(objects):
     """CLASS METHOD! Takes a list of RatedPost objects and writes
