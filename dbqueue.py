@@ -308,16 +308,21 @@ class RecalculateSubscription:
                 continue # this is an old post which is already calculated
             
             rating.recalculate()
-
-            # FIXME: implementing deduplication
-            # find all dupes of this story. find out which one has the
-            # highest rating. queue tasks to mark all the others as
-            # read.            
-            batch.append(rating)
+            batch.append(rating)            
 
         if batch:
             dbimpl.save_batch(batch)
             dbimpl.conn.commit()
+
+        # now that the batch has been saved to the database we can go
+        # through each post in the batch, and look for duplicates of
+        # it. we then queue tasks to mark the lowest-rated dupes as
+        # read.
+        for rating in batch:
+            dupes = rating.find_dupes()
+            for dupe in dupes[1 : ]:
+                dbimpl.mqueue.send('RecordVote %s %s read' %
+                                   (username, dupe.get_post().get_local_id()))
 
 class RecalculateAllPosts:
 
