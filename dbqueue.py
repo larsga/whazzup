@@ -242,7 +242,8 @@ class ParseFeed:
             newposts = True
             itemobj = dbimpl.Item(None, newitem.get_title(),
                                   newitem.get_link(), newitem.get_description(),
-                                  parsed_date, newitem.get_author(), feed)
+                                  parsed_date, newitem.get_author(), feed, None)
+            # this sends MinHash message to create a minhash for the item
             itemobj.save() # FIXME: we could use batch updates here, too
         
         # update feed row
@@ -286,7 +287,7 @@ class RecalculateSubscription:
         """, (username, feedid))
         for (username, postid, points,
              id, title, link, descr, date, author) in dbimpl.cur.fetchall():
-            post = dbimpl.Item(id, title, link, descr, date, author, feed)
+            post = dbimpl.Item(id, title, link, descr, date, author, feed, None)
             ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
 
         # load all seen posts
@@ -319,6 +320,17 @@ class RecalculateSubscription:
         # it. we then queue tasks to mark the lowest-rated dupes as
         # read.
         for rating in batch:
+            if rating.is_read_as_dupe():
+                # if we have already read a duplicate of this story,
+                # then we don't need this rating. we solve that by
+                # marking the story as read directly.  checking this
+                # *after* the rating is stored, so that we can use the
+                # minhash when checking
+                dbimpl.mqueue.send('RecordVote %s %s read' %
+                                   (username, rating.get_post().get_local_id()))
+                continue
+
+            # ok, we haven't read this. now mark the lowest-rated as read
             dupes = rating.find_dupes()
             for dupe in dupes[1 : ]:
                 dbimpl.mqueue.send('RecordVote %s %s read' %
@@ -433,6 +445,12 @@ class AddFeed:
 
         # now we need to download the feed
         dbimpl.mqueue.send("CheckFeed %s" % feed.get_local_id())
+
+class MinHash:
+
+    def invoke(self, itemid):
+        item = dbimpl.feeddb.get_item_by_id(itemid)
+        item.compute_minhash()
         
 # ----- STATISTICS COLLECTOR
 
@@ -738,6 +756,7 @@ msg_dict = {
     "StatsReport" : StatsReport(),
     "FeedChecked" : FeedChecked(),
     "AddFeed" : AddFeed(),
+    'MinHash' : MinHash(),
     }
 recv_mqueue = IPCReceivingMessageQueue()
 atexit.register(recv_mqueue.remove) # message queue cleanup
