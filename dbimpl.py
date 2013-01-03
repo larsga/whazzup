@@ -1,5 +1,5 @@
 
-import datetime, hashlib, smtplib, marshal, os
+import datetime, hashlib, smtplib, marshal, os, binascii, sys, operator
 import psycopg2, sysv_ipc
 import psycopg2.extensions
 import feedlib, vectors
@@ -33,6 +33,34 @@ def query_for_set(query, args):
 def query_for_list(query, args):
     cur.execute(query, args)
     return [row[0] for row in cur.fetchall()]
+
+# ----- MINHASHING
+
+def hash2(str):
+    h = 0
+    for ch in str:
+        h = (255 * h + ord(ch)) & 0xffffffff
+    return h
+
+def hash3(str):
+    h = 0
+    for ch in str:
+        h = ((h ^ ord(ch)) * 0x01000193) & 0xffffffff
+    return h
+
+def minhash(tokens, hashes = [hash, hash2, hash3, binascii.crc32]):
+    '''tokens = list of strings'''
+    smallest = [sys.maxint] * len(hashes)
+    #best = [None] * len(hashes)
+    for token in tokens:
+        for ix in range(len(hashes)):
+            h = hashes[ix](token.encode('utf-8'))
+            if h < smallest[ix]:
+                smallest[ix] = h
+                #best[ix] = token
+
+    return reduce(operator.xor, smallest)
+    #return (smallest, best)
 
 # ----- THE ACTUAL LOGIC
 
@@ -104,9 +132,9 @@ class FeedDatabase(feedlib.Database):
         row = cur.fetchone()
         if not row:
             return None
-        (id, title, link, descr, date, author, feedid) = row
+        (id, title, link, descr, date, author, feedid, minhash) = row
         return Item(id, title, link, descr, date, author,
-                    self.get_feed_by_id(feedid))
+                    self.get_feed_by_id(feedid), minhash)
     
     def get_feed_by_id(self, id):
         cur.execute("select * from feeds where id = %s", (int(id), ))
@@ -185,8 +213,8 @@ class Feed(feedlib.Feed):
         cur.execute("""
         select * from posts where feed = %s order by pubdate desc
         """, (self._id, ))
-        return [Item(id, title, link, descr, pubdate, author, self) for
-                (id, title, link, descr, pubdate, author, feed) in
+        return [Item(id, title, link, descr, pubdate, author, self, mh) for
+                (id, title, link, descr, pubdate, author, feed, mh) in
                 cur.fetchall()]
 
     def get_item_count(self):
@@ -263,7 +291,7 @@ class Feed(feedlib.Feed):
     
 class Item(feedlib.Post):
 
-    def __init__(self, id, title, link, descr, date, author, feed):
+    def __init__(self, id, title, link, descr, date, author, feed, minhash):
         self._id = id
         self._title = title
         self._link = link
@@ -272,6 +300,7 @@ class Item(feedlib.Post):
         self._author = author
         self._feed = feed
         self._pubdate = None
+        self._minhash = minhash
 
     def get_local_id(self):
         return str(self._id)
@@ -302,6 +331,9 @@ class Item(feedlib.Post):
 
     def get_site(self):
         return self._feed
+
+    def get_minhash(self):
+        return self._minhash
     
     def save(self):
         if self._id:
@@ -324,12 +356,25 @@ class Item(feedlib.Post):
             return
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
-
+            
         cur.execute("""
-        insert into posts values (default, %s, %s, %s, %s, %s, %s)
+        insert into posts values (default, %s, %s, %s, %s, %s, %s, NULL)
        """, (self._title, self._link, self._descr, self.get_date(),
               self._author, self._feed.get_local_id()))
         conn.commit()
+
+        cur.execute("SELECT currval(pg_get_serial_sequence('posts', 'id'))")
+        self._id = cur.fetchone()
+        mqueue.send('MinHash %s' % self._id)
+
+    def compute_minhash(self):
+        'Also saves the minhash to the database.'
+        vector = self.get_vector().get_keys()
+        if len(vector) > 5:
+            mh = minhash(vector)
+            update('update posts set minhash = %s where id = %s',
+                   (mh, self._id))
+            conn.commit()
 
     def delete(self):
         update("delete from read_posts where post = %s", (self._id, ))
@@ -486,25 +531,45 @@ class RatedPost(feedlib.RatedPost):
                 int(self.get_subscription().get_feed().get_local_id()),
                 self._points, self._prob)
 
+    def is_read_as_dupe(self):
+        '''Returns true if we already have a duplicate of this Post in
+        the read_posts table. Duplicates found via link and minhash.'''
+
+        username = self._user.get_username()
+        post = self.get_post()
+        cur.execute('''select p.id
+                       from posts p
+                       join read_posts r on p.id = r.post
+                       where r.username = %s and
+                             (link = %s or minhash = %s)''',
+                    (username, post.get_link(), post.get_minhash()))
+
+        return bool(cur.fetchall())
+
     def find_dupes(self):
         '''Returns RatedPost objects (for the same user) for other
         Post objects ultimately representing the same story. The
         objects are sorted by points, descending.'''
 
         username = self._user.get_username()
+        post = self.get_post()
         cur.execute('''select p.id, p.feed
                        from posts p
                        join rated_posts r on p.id = r.post
-                       where r.username = %s and link = %s
+                       where r.username = %s and
+                             (link = %s or minhash = %s)
                        order by r.points desc''',
-                    (username, self.get_post().get_link()))
+                    (username, post.get_link(), post.get_minhash()))
 
-        # id, title, link, descr, date, author, feed):
-        # user, post, subscription
+        seen_feeds = set() 
         dupes = []
         for (id, feed) in cur.fetchall():
+            if feed in seen_feeds:
+                continue # we don't dupe posts if they are from the same feed
+
+            seen_feeds.add(feed)
             feed = feeddb.get_feed_by_id(feed)
-            post = Item(id, None, None, None, None, None, feed)
+            post = Item(id, None, None, None, None, None, feed, None)
             dupes.append(RatedPost(username, post, Subscription(feed, self._user)))
         return dupes
 
@@ -669,7 +734,7 @@ class User(feedlib.User):
           order by points desc limit %s offset %s
         """, (self._username, (high - low), low))
         return [Item(id, title, link, descr, date, author,
-                     feeddb.get_feed_by_id(feed)) for
+                     feeddb.get_feed_by_id(feed), None) for
                 (id, title, link, descr, date, author, feed) in
                 cur.fetchall()]
 
@@ -771,3 +836,4 @@ feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 conn = psycopg2.connect(DB_CONNECT_STRING)
 cur = conn.cursor()
 mqueue = SendingMessageQueue()
+
