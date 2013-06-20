@@ -205,6 +205,7 @@ class FeedChecked:
 class ParseFeed:
     
     def invoke(self, feedid, lastmod):
+        start = time.clock()
         feedid = int(feedid)
         lastmod = lastmod.replace('%', ' ')
         if lastmod == "None":
@@ -213,11 +214,13 @@ class ParseFeed:
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
             return
+        print '    Got feed %s' % (time.clock() - start)
         
         items = {} # url -> item (so we can check for new ones)
         for item in feed.get_items():
             items[item.get_link()] = item
-        
+        print '    Loaded items %s' % (time.clock() - start)
+            
         # read xml
         try:
             file = os.path.join(FEED_CACHE, "feed-%s.rss" % feedid)
@@ -232,6 +235,8 @@ class ParseFeed:
             feed.save()
             return
 
+        print '    Parsed feed %s' % (time.clock() - start)
+        
         # store all new items
         newposts = False
         for newitem in site.get_items():
@@ -245,7 +250,9 @@ class ParseFeed:
                                   parsed_date, newitem.get_author(), feed, None)
             # this sends MinHash message to create a minhash for the item
             itemobj.save() # FIXME: we could use batch updates here, too
-        
+
+        print '    Stored items %s' % (time.clock() - start)
+            
         # update feed row
         feed.set_title(site.get_title())
         feed.set_link(site.get_link())
@@ -253,6 +260,7 @@ class ParseFeed:
         feed.set_last_modified(lastmod)
         feed.is_read_now()
         feed.save()
+        print '    Updated feed %s' % (time.clock() - start)
             
         # recalc all subs on this feed (if new posts, that is)
         if newposts:
@@ -264,7 +272,8 @@ class ParseFeed:
                 # that we have new posts, so we only calculate those.
                 dbimpl.mqueue.send("RecalculateSubscription %s %s 0" %
                                    (feed.get_local_id(), user))
-
+        print '    Done %s' % (time.clock() - start)
+                
 class RecalculateSubscription:
 
     def invoke(self, feedid, username, recalculate_old_posts = True):
@@ -365,7 +374,9 @@ class RecordVote:
         if vote != "read":            
             link.record_vote(vote)
             link.get_subscription().record_vote(vote)
-            dbimpl.mqueue.send("RecalculateAllPosts " + username)
+            # giving this message priority, so that subscriptions already
+            # in the queue for calculation will be deduped
+            dbimpl.mqueue.send("RecalculateAllPosts " + username, 2)
 
 class StatsReport:
 

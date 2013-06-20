@@ -20,7 +20,8 @@ create table posts (
   descr text,
   pubdate timestamp not null,
   author varchar(100),
-  feed int not null
+  feed int not null,
+  minhash bigint
 );
 
 create table subscriptions (

@@ -548,8 +548,8 @@ class RatedPost(feedlib.RatedPost):
 
     def find_dupes(self):
         '''Returns RatedPost objects (for the same user) for other
-        Post objects ultimately representing the same story. The
-        objects are sorted by points, descending.'''
+        Post objects ultimately representing the same story, but not
+        read by user. The objects are sorted by points, descending.'''
 
         username = self._user.get_username()
         post = self.get_post()
@@ -573,6 +573,15 @@ class RatedPost(feedlib.RatedPost):
             dupes.append(RatedPost(username, post, Subscription(feed, self._user)))
         return dupes
 
+
+    def find_all_dupes(self):
+        '''Returns RatedPost objects (for the same user) for other
+        Post objects ultimately representing the same story, including
+        ones already read by user.'''
+
+        dupes = self.find_dupes() # this gives us the unread ones
+
+    
 def save_batch(objects):
     """CLASS METHOD! Takes a list of RatedPost objects and writes
     them to the database in a single batch SQL operation."""
