@@ -495,6 +495,22 @@ class RatedPost:
     def is_seen(self):
         "Returns true iff the link has been seen by the user."
         return self._post.is_seen(self._user)
+
+    def is_read_as_dupe(self):
+        "Returns true iff the user has read a duplicate of this post."
+        return False
+
+    def find_dupes(self):
+        '''Returns RatedPost objects (for the same user) for other
+        Post objects ultimately representing the same story, but not
+        read by user. The objects are sorted by points, descending.'''
+        return []
+
+    def find_all_dupes(self):
+        '''Returns RatedPost objects (for the same user) for other
+        Post objects ultimately representing the same story, including
+        ones already read by user.'''
+        return []
         
 # --- Word database
 

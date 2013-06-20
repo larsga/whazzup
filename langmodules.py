@@ -45,6 +45,11 @@ class LanguageModule:
             self._freq = self._load_frequency_table()
         return self._freq.get(word, 1)
 
+    def _get_file_ref(self, file):
+        if PATH:
+            return PATH + os.sep + file
+        return file
+    
     def _load_stop_words(self):
         return {}
 
@@ -63,13 +68,13 @@ class NorwegianModule(LanguageModule):
     
     def _load_stop_words(self):
         stop = {}
-        for line in codecs.open(PATH + os.sep + "stopno.txt", "r", "iso-8859-1").readlines():
+        for line in codecs.open(self._get_file_ref("stopno.txt"), "r", "iso-8859-1"):
             stop[string.strip(line)] = 1
         return stop
 
     def _load_frequency_table(self):
         import marshal
-        inf = open(PATH + os.sep + "data/nofreq.mar", "rb")
+        inf = open(self._get_file_ref("data/nofreq.mar"), "rb")
         map = marshal.load(inf)
         inf.close()
         return map
@@ -97,20 +102,20 @@ class EnglishModule(LanguageModule):
 
     def _load_stop_words(self):
         stop = {}
-        for line in open(PATH + os.sep + "stop.txt").readlines():
+        for line in open(self._get_file_ref("stop.txt")):
             stop[string.strip(line)] = 1
         return stop
 
     def _load_word_classes(self):
         import marshal
-        inf = open(PATH + os.sep + "data/wcen.mar", "rb")
+        inf = open(self._get_file_ref("data/wcen.mar"), "rb")
         wc = marshal.load(inf)
         inf.close()
         return wc
 
     def _load_frequency_table(self):
         import marshal
-        inf = open(PATH + os.sep + "data/enfreq.mar", "rb")
+        inf = open(self._get_file_ref("data/enfreq.mar"), "rb")
         map = marshal.load(inf)
         inf.close()
         return map

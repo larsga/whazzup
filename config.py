@@ -9,7 +9,7 @@ SESSION_DIR = 'sessions'
 DBM_DIR = 'dbms/'
 
 # database connection string
-DB_CONNECT_STRING = 'dbname=whazzup'
+DB_CONNECT_STRING = 'dbname=whazzup host=localhost'
 
 # key number for sysv_ipc message queue
 QUEUE_NUMBER_LOW = 6300
@@ -29,3 +29,5 @@ DOWNLOAD_THREADS = 5
 
 # temporary storage for downloaded feeds
 FEED_CACHE = '/tmp'
+
+QUEUE_FILE = 'queue.txt'
