@@ -9,6 +9,7 @@ Supports both RSS 0.90 and 0.91.
 import string, urlparse, urllib2, httplib
 from xml.sax import saxutils, make_parser
 from xml.sax.handler import feature_namespaces, ContentHandler
+from xml.sax.handler import feature_external_ges
 from saxtracker import SAXTracker
 
 # ===== Globals =====
@@ -347,6 +348,7 @@ def read_xml(url, handler, data_loader = urllib_loader):
     p.setContentHandler(handler)
     #p.setErrorHandler(saxutils.ErrorRaiser(2))
     p.setFeature(feature_namespaces, 0)
+    p.setFeature(feature_external_ges, False)
     data_loader(p, url)
     
 def read_rss(url, factory = DefaultFactory()):
