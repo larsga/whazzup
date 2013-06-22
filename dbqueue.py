@@ -205,7 +205,6 @@ class FeedChecked:
 class ParseFeed:
     
     def invoke(self, feedid, lastmod):
-        start = time.clock()
         feedid = int(feedid)
         lastmod = lastmod.replace('%', ' ')
         if lastmod == "None":
@@ -214,12 +213,10 @@ class ParseFeed:
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
             return
-        print '    Got feed %s' % (time.clock() - start)
         
         items = {} # url -> item (so we can check for new ones)
         for item in feed.get_items():
             items[item.get_link()] = item
-        print '    Loaded items %s' % (time.clock() - start)
             
         # read xml
         try:
@@ -233,10 +230,9 @@ class ParseFeed:
             #traceback.print_exc()
             feed.set_error(str(e))
             feed.save()
+            os.unlink(file)
             return
 
-        print '    Parsed feed %s' % (time.clock() - start)
-        
         # store all new items
         newposts = False
         for newitem in site.get_items():
@@ -251,8 +247,6 @@ class ParseFeed:
             # this sends MinHash message to create a minhash for the item
             itemobj.save() # FIXME: we could use batch updates here, too
 
-        print '    Stored items %s' % (time.clock() - start)
-            
         # update feed row
         feed.set_title(site.get_title())
         feed.set_link(site.get_link())
@@ -260,7 +254,6 @@ class ParseFeed:
         feed.set_last_modified(lastmod)
         feed.is_read_now()
         feed.save()
-        print '    Updated feed %s' % (time.clock() - start)
             
         # recalc all subs on this feed (if new posts, that is)
         if newposts:
@@ -272,11 +265,11 @@ class ParseFeed:
                 # that we have new posts, so we only calculate those.
                 dbimpl.mqueue.send("RecalculateSubscription %s %s 0" %
                                    (feed.get_local_id(), user))
-        print '    Done %s' % (time.clock() - start)
                 
 class RecalculateSubscription:
 
     def invoke(self, feedid, username, recalculate_old_posts = True):
+        start = time.clock()
         # recalculate_old_posts: if false, only new posts (for which no
         # rated_post row exists) are calculated, saving time.
         feedid = int(feedid)
@@ -284,6 +277,7 @@ class RecalculateSubscription:
         user = dbimpl.User(username)
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         sub = dbimpl.Subscription(feed, user)
+        print '    Initialized', time.clock() - start
         
         # load all already rated posts on this subscription 
         ratings = {} # int(postid) -> ratedpost
@@ -298,12 +292,14 @@ class RecalculateSubscription:
              id, title, link, descr, date, author) in dbimpl.cur.fetchall():
             post = dbimpl.Item(id, title, link, descr, date, author, feed, None)
             ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
+        print '    Loaded rated posts', time.clock() - start
 
         # load all seen posts
         seen = dbimpl.query_for_set("""
           select post from read_posts
           where username = %s and feed = %s
         """, (username, feedid))
+        print '    Loaded seen posts', time.clock() - start
 
         batch = []
         for item in feed.get_items():
@@ -320,9 +316,12 @@ class RecalculateSubscription:
             rating.recalculate()
             batch.append(rating)            
 
+        print '    Recalculated %s posts %s'%(len(batch), time.clock() - start)
+            
         if batch:
             dbimpl.save_batch(batch)
             dbimpl.conn.commit()
+            print '    Saved batch', time.clock() - start
 
         # now that the batch has been saved to the database we can go
         # through each post in the batch, and look for duplicates of
@@ -344,6 +343,7 @@ class RecalculateSubscription:
             for dupe in dupes[1 : ]:
                 dbimpl.mqueue.send('RecordVote %s %s read' %
                                    (username, dupe.get_post().get_local_id()))
+        print '    Identified duplicates', time.clock() - start
 
 class RecalculateAllPosts:
 
