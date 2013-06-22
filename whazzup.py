@@ -218,7 +218,7 @@ class AddFeed:
             return render.not_logged_in(users.create_login_url("/"))
         
         url = string.strip(web.input().get("url"))
-        controller.add_feed(url, user)
+        controller.add_feed(url, user.get_username())
 
         web.seeother(web.ctx.homedomain + "/sites")
 
