@@ -269,7 +269,6 @@ class ParseFeed:
 class RecalculateSubscription:
 
     def invoke(self, feedid, username, recalculate_old_posts = True):
-        start = time.clock()
         # recalculate_old_posts: if false, only new posts (for which no
         # rated_post row exists) are calculated, saving time.
         feedid = int(feedid)
@@ -277,7 +276,6 @@ class RecalculateSubscription:
         user = dbimpl.User(username)
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         sub = dbimpl.Subscription(feed, user)
-        print '    Initialized', time.clock() - start
         
         # load all already rated posts on this subscription 
         ratings = {} # int(postid) -> ratedpost
@@ -292,14 +290,12 @@ class RecalculateSubscription:
              id, title, link, descr, date, author) in dbimpl.cur.fetchall():
             post = dbimpl.Item(id, title, link, descr, date, author, feed, None)
             ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
-        print '    Loaded rated posts', time.clock() - start
 
         # load all seen posts
         seen = dbimpl.query_for_set("""
           select post from read_posts
           where username = %s and feed = %s
         """, (username, feedid))
-        print '    Loaded seen posts', time.clock() - start
 
         batch = []
         for item in feed.get_items():
@@ -316,13 +312,11 @@ class RecalculateSubscription:
             rating.recalculate()
             batch.append(rating)            
 
-        print '    Recalculated %s posts %s'%(len(batch), time.clock() - start)
-            
         if batch:
             dbimpl.save_batch(batch)
             dbimpl.conn.commit()
-            print '    Saved batch', time.clock() - start
 
+        return # we disable deduplication
         # now that the batch has been saved to the database we can go
         # through each post in the batch, and look for duplicates of
         # it. we then queue tasks to mark the lowest-rated dupes as
@@ -343,7 +337,6 @@ class RecalculateSubscription:
             for dupe in dupes[1 : ]:
                 dbimpl.mqueue.send('RecordVote %s %s read' %
                                    (username, dupe.get_post().get_local_id()))
-        print '    Identified duplicates', time.clock() - start
 
 class RecalculateAllPosts:
 

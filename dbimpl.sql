@@ -23,6 +23,8 @@ create table posts (
   feed int not null,
   minhash bigint
 );
+create index rated_posts_minhash on rated_posts (minhash);
+create index posts_link on posts (link);
 
 create table subscriptions (
   feed int not null,
@@ -41,7 +43,7 @@ create table rated_posts (
   prob float not null,
   PRIMARY KEY (username, post)
 );
-create index on rated_posts_storylist on rated_posts (username, points);
+create index rated_posts_storylist on rated_posts (username, points);
 
 create table read_posts (
   username varchar(20) not null,
