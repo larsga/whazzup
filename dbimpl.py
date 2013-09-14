@@ -156,8 +156,8 @@ class FeedDatabase(feedlib.Database):
                        order by subs desc limit 50""")
         return [Feed(feedid, title, xmlurl, htmlurl, None, None, lastread, None,
                      maxposts, lastmod, subs)
-                for (feedid, title, xmlurl, htmlurl, lastread, maxposts, subs,
-                     lastmod)
+                for (feedid, title, xmlurl, htmlurl, lastread, maxposts, 
+                     lastmod, subs)
                 in cur.fetchall()]
 
     def get_user_count(self):
