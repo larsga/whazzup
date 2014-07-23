@@ -73,11 +73,11 @@ class Controller(feedlib.Controller):
 
     def is_single_user(self):
         return False
-    
+
     def vote_received(self, user, id, vote):
         # sending with higher priority so UI can be updated correctly
         mqueue.send("RecordVote %s %s %s" % (user.get_username(), id, vote), 2)
-        
+
     def add_feed(self, url, user):
         mqueue.send("AddFeed %s %s" % (user, url), 2)
 
@@ -104,7 +104,7 @@ To log in, go to http://whazzup.garshol.priv.no/ and log in with
   username: %s
   password: %s
 
--- 
+--
 Whazzup sysadmin daemon
 """ % (username, password))
         conn.quit()
@@ -135,12 +135,15 @@ class FeedDatabase(feedlib.Database):
         (id, title, link, descr, date, author, feedid, minhash) = row
         return Item(id, title, link, descr, date, author,
                     self.get_feed_by_id(feedid), minhash)
-    
+
     def get_feed_by_id(self, id):
         cur.execute("select * from feeds where id = %s", (int(id), ))
         row = cur.fetchone()
         if row:
-            return apply(Feed, row)
+            (id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
+             last_error, max_posts, time_added, last_modified) = row
+            return Feed(id, title, xmlurl, htmlurl, error, time_to_wait,
+                        last_read, last_error, max_posts, last_modified)
         else:
             return None
 
@@ -156,7 +159,7 @@ class FeedDatabase(feedlib.Database):
                        order by subs desc limit 50""")
         return [Feed(feedid, title, xmlurl, htmlurl, None, None, lastread, None,
                      maxposts, lastmod, subs)
-                for (feedid, title, xmlurl, htmlurl, lastread, maxposts, 
+                for (feedid, title, xmlurl, htmlurl, lastread, maxposts,
                      lastmod, subs)
                 in cur.fetchall()]
 
@@ -180,7 +183,7 @@ class FeedDatabase(feedlib.Database):
 
     def get_notification_count(self):
         return query_for_value("select count(*) from notify")
-    
+
 class Feed(feedlib.Feed):
 
     def __init__(self, id, title, xmlurl, htmlurl, error, timetowait,
@@ -231,7 +234,7 @@ class Feed(feedlib.Feed):
                     feedlib.toseconds(self._lastread))
         else:
             return 0
-    
+
     def set_error(self, msg):
         self._error = msg
         if msg:
@@ -283,12 +286,12 @@ class Feed(feedlib.Feed):
 
     def get_last_modified(self):
         return self._lastmod
-        
+
     def is_subscribed(self, user):
         return query_for_value("""select username from subscriptions
                                   where username = %s and feed = %s""",
                                (user.get_username(), self._id))
-    
+
 class Item(feedlib.Post):
 
     def __init__(self, id, title, link, descr, date, author, feed, minhash):
@@ -316,7 +319,7 @@ class Item(feedlib.Post):
 
     def get_description(self):
         return self._descr
-    
+
     def get_author(self):
         return self._author
 
@@ -334,7 +337,7 @@ class Item(feedlib.Post):
 
     def get_minhash(self):
         return self._minhash
-    
+
     def save(self):
         if self._id:
             raise NotImplementedError()
@@ -356,7 +359,7 @@ class Item(feedlib.Post):
             return
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
-            
+
         cur.execute("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s, NULL)
        """, (self._title, self._link, self._descr, self.get_date(),
@@ -396,21 +399,21 @@ class Item(feedlib.Post):
 
     def get_vector(self):
         filename = os.path.join(VECTOR_CACHE_DIR, str(self.get_local_id()))
-        try:            
+        try:
             inf = open(filename, "r")
             vector = vectors.Vector(marshal.load(inf))
             inf.close()
         except IOError, e:
             if e.errno != 2:
                 raise e
-            
+
             vector = feedlib.Post.get_vector(self)
             outf = open(filename, "w")
             marshal.dump(vector.get_map(), outf)
             outf.close()
-            
+
         return vector
-    
+
 class Subscription(feedlib.Subscription):
 
     def __init__(self, feed, user, up = None, down = None):
@@ -419,7 +422,7 @@ class Subscription(feedlib.Subscription):
         self._user = user
         self._up = up
         self._down = down
-    
+
     def get_feed(self):
         return self._feed
 
@@ -430,7 +433,7 @@ class Subscription(feedlib.Subscription):
         return [RatedPost(self._user,
                           feeddb.get_item_by_id(postid), self, points, prob)
                 for (postid, points, prob) in cur.fetchall()]
-    
+
     def get_user(self):
         return self._user
 
@@ -483,7 +486,7 @@ class RatedPost(feedlib.RatedPost):
     def __init__(self, user, post, subscription, points = None, prob = None):
         feedlib.RatedPost.__init__(self, user, post, subscription, points, prob)
         self._exists_in_db = (points is not None) # FIXME: dubious
-        
+
     def seen(self):
         # first remove the rating
         update("delete from rated_posts where username = %s and post = %s",
@@ -505,7 +508,7 @@ class RatedPost(feedlib.RatedPost):
         self._points = feedlib.calculate_points(self.get_overall_probability(),
                                                 self._post.get_date())
         self.save()
-        
+
     def save(self):
         if self._exists_in_db:
             update("""update rated_posts set points = %s, last_recalc = now(),
@@ -561,7 +564,7 @@ class RatedPost(feedlib.RatedPost):
                        order by r.points desc''',
                     (username, post.get_link(), post.get_minhash()))
 
-        seen_feeds = set() 
+        seen_feeds = set()
         dupes = []
         for (id, feed) in cur.fetchall():
             if feed in seen_feeds:
@@ -581,7 +584,7 @@ class RatedPost(feedlib.RatedPost):
 
         dupes = self.find_dupes() # this gives us the unread ones
 
-    
+
 def save_batch(objects):
     """CLASS METHOD! Takes a list of RatedPost objects and writes
     them to the database in a single batch SQL operation."""
@@ -647,7 +650,7 @@ class WordDatabase(feedlib.WordDatabase):
 
     def close(self):
         self._dbm.close()
-        
+
 # ----- FAKING USER ACCOUNTS
 
 def crypt(password):
@@ -754,7 +757,7 @@ class User(feedlib.User):
 
     def get_vote_stats(self):
         return (0, 0) # FIXME
-    
+
     def _get_word_db(self):
         if not self._worddb:
             self._worddb = WordDatabase(DBM_DIR + self._username + ".dbm", self._readonly)
@@ -774,7 +777,7 @@ class User(feedlib.User):
 
     def subscribe(self, feed):
         key = (int(feed.get_local_id()), self._username)
-        
+
         # if user is not already subscribed, add subscription
         if not query_for_value("""select * from subscriptions where
                             feed = %s and username = %s""", key):
@@ -783,7 +786,7 @@ class User(feedlib.User):
     def get_subscription(self, feedid):
         feed = feeddb.get_feed_by_id(feedid)
         return Subscription(feed, self)
-            
+
 # ----- SENDING MESSAGE QUEUE
 
 class SendingMessageQueue:
@@ -811,7 +814,7 @@ class SendingMessageQueue:
             if pos:
                 self._internal_queue = self._internal_queue[pos : ]
                 print "Truncated queue", self._internal_queue
-        
+
         try:
             self._send(msg, priority)
         except sysv_ipc.BusyError:
@@ -836,7 +839,7 @@ class SendingMessageQueue:
         self._mqueue.remove()
 
 # ----- SET UP
-        
+
 users = UserDatabase()
 controller = Controller()
 feeddb = FeedDatabase()
@@ -845,4 +848,3 @@ feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 conn = psycopg2.connect(DB_CONNECT_STRING)
 cur = conn.cursor()
 mqueue = SendingMessageQueue()
-
