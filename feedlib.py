@@ -74,7 +74,12 @@ def parse_date(datestring):
             0x0400 <= ord(datestring[1]) <= 0x04FF and
             datestring[2] == ','):
             datestring = datestring[4 : -6] # cutoff, so strptime can handle
-        
+
+        # NRK manages to pollute their date/time fields with NBSP
+        # instead of spaces. we clean up their mess here.
+        if type(datestring) == unicode:
+            datestring = datestring.replace(u'\xa0', u' ')
+
         formats = [("%a, %d %b %Y %H:%M:%S", 24),
                    ("%Y-%m-%dT%H:%M:%S", 19),
                    ("%a, %d %b %Y %H:%M", 22),
@@ -113,10 +118,10 @@ def calculate_points(prob, postdate):
 
 def compute_max_posts(site):
     "Given an rsslib.Site, computes max number of posts to store."
-    
+
     if not site.get_items():
         return 300
-    
+
     oldest = site.get_items()[-1]
     dt = parse_date(oldest.get_pubdate())
     delta = time.time() - toseconds(dt)
@@ -137,7 +142,7 @@ class Controller:
 
     def mark_as_read(self, user, ids):
         raise NotImplementedError()
-    
+
     def add_feed(self, url):
         raise NotImplementedError()
 
@@ -174,10 +179,10 @@ class Database:
 
     def get_feed_by_id(self, id):
         raise NotImplementedError()
-    
+
     def get_item_by_id(self, id):
         raise NotImplementedError()
-    
+
 class Feed:
 
     def get_local_id(self):
@@ -190,7 +195,7 @@ class Feed:
     def get_url(self):
         "String: the URL of the XML feed."
         raise NotImplementedError()
-    
+
     def get_link(self):
         "String: the URL of the feed's home page."
         raise NotImplementedError()
@@ -203,17 +208,17 @@ class Feed:
     def get_time_to_wait(self):
         "Seconds to wait between each time we poll the feed."
         raise NotImplementedError()
-    
+
     def time_since_last_read(self):
         "Seconds since last read."
         raise NotImplementedError()
-    
+
     def get_item_count(self):
         raise NotImplementedError()
 
     def get_items(self):
         raise NotImplementedError()
-            
+
     def is_being_read(self):
         raise NotImplementedError()
 
@@ -228,17 +233,17 @@ class Feed:
 
     def set_max_posts(self, maxposts):
         raise NotImplementedError()
-    
+
     # shared code
 
     def nice_time_since_last_read(self):
         return nice_time(int(self.time_since_last_read()))
-    
+
 class Post:
 
     def __init__(self):
         self._date = None
-    
+
     def get_local_id(self):
         raise NotImplementedError()
 
@@ -247,10 +252,10 @@ class Post:
 
     def get_link(self):
         raise NotImplementedError()
-    
+
     def get_description(self):
         raise NotImplementedError()
-    
+
     def get_pubdate(self):
         raise NotImplementedError()
 
@@ -269,7 +274,7 @@ class Post:
     def is_seen(self, user):
         "Returns true iff the link has been seen by the user."
         raise NotImplementedError()
-    
+
     # shared code
 
     def get_date(self):
@@ -286,7 +291,7 @@ class Post:
 
     def nice_age(self):
         return nice_time(int(self.get_age()))
-    
+
     def get_author_vector(self):
         return vectors.text_to_vector(html2text(self.get_author() or ""))
 
@@ -309,7 +314,7 @@ class User:
     def get_username(self):
         "Returns user name as a string."
         raise NotImplementedError()
-    
+
     def record_word_vote(self, word, vote):
         self._get_word_db().record_vote(word, vote)
 
@@ -322,7 +327,7 @@ class User:
     def get_word_ratio(self, word):
         worddb = self._get_word_db()
         return worddb.get_word_ratio(word)
-    
+
     def get_author_ratio(self, word):
         authordb = self._get_author_db()
         return authordb.get_word_ratio(word)
@@ -330,10 +335,10 @@ class User:
     def get_feeds(self):
         "Return the feeds the user is subscribed to, sorted by voting ratio."
         raise NotImplementedError()
-    
+
     def get_item_count(self):
         raise NotImplementedError()
-        
+
     def get_item_range(self, low, high):
         raise NotImplementedError()
 
@@ -342,20 +347,20 @@ class User:
 
     def get_no_of_item(self, item):
         raise NotImplementedError()
-    
+
     def commit(self):
         raise NotImplementedError()
 
     def get_subscription(self, feedid):
         raise NotImplementedError()
-    
+
     def subscribe(self, feed):
         raise NotImplementedError()
 
     def get_vote_stats(self):
         "Returns a tuple (upvotes, downvotes)."
         raise NotImplementedError()
-    
+
     def _get_word_db(self):
         raise NotImplementedError()
 
@@ -388,7 +393,7 @@ class Subscription:
 
     def record_vote(self, vote):
         raise NotImplementedError()
-    
+
 class RatedPost:
 
     def __init__(self, user, post, subscription, points = None, prob = None):
@@ -403,7 +408,7 @@ class RatedPost:
 
     def get_subscription(self):
         return self._subscription
-        
+
     def get_points(self):
         if self._points is None:
             self.recalculate()
@@ -418,12 +423,12 @@ class RatedPost:
     def seen(self):
         "Marks the link as seen."
         raise NotImplementedError()
-    
+
     def get_word_probability(self):
         probs = []
         for (word, count) in self._post.get_vector().get_pairs():
             ratio = self._user.get_word_ratio(word)
-            for ix in range(count):                
+            for ix in range(count):
                 probs.append(ratio)
 
         try:
@@ -433,20 +438,20 @@ class RatedPost:
                 return compute_bayes(probs)
         except ZeroDivisionError, e:
             print "ZDE:", self._post.get_title().encode("utf-8"), probs
-    
+
     def get_overall_probability(self):
         if self._prob is not None:
             return self._prob
-        
+
         word_prob = self.get_word_probability()
         site_prob = self.get_site_probability()
         author_prob = self.get_author_probability()
         self._prob = compute_bayes([word_prob, site_prob, author_prob])
         return self._prob
-    
+
     def get_site_probability(self):
         return self.get_subscription().get_ratio()
-        
+
     def get_author_probability(self):
         author = self._post.get_author()
         if author:
@@ -454,7 +459,7 @@ class RatedPost:
             return self._user.get_author_ratio(author)
         else:
             return 0.5
-        
+
     def recalculate(self):
         try:
             prob = self.get_overall_probability()
@@ -467,7 +472,7 @@ class RatedPost:
     def record_vote(self, vote):
         if vote == "read":
             return # should never happen
-        
+
         for (word, count) in self._post.get_vector().get_pairs():
             for i in range(count):
                 self._user.record_word_vote(word, vote)
@@ -478,7 +483,7 @@ class RatedPost:
 
         self._user.record_site_vote(self._post.get_site().get_link(), vote)
         self._user.commit()
-        
+
         # the controller takes care of queueing a recalculation task
 
     def get_word_tokens(self):
@@ -491,7 +496,7 @@ class RatedPost:
 
     def age(self):
         raise NotImplementedError()
-    
+
     def is_seen(self):
         "Returns true iff the link has been seen by the user."
         return self._post.is_seen(self._user)
@@ -511,7 +516,7 @@ class RatedPost:
         Post objects ultimately representing the same story, including
         ones already read by user.'''
         return []
-        
+
 # --- Word database
 
 # FIXME: this needs to be properly generalized
@@ -549,4 +554,3 @@ class WordDatabase:
 
     def close(self):
         raise NotImplementedError()
-
