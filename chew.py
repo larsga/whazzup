@@ -1,7 +1,7 @@
 # -*- coding: iso-8859-1 -*-
 
 import sys, string, math, operator, re, os, urllib
-import gazette        
+import gazette
 
 # &#8217;
 
@@ -48,7 +48,7 @@ class CompoundTracker:
     def __init__(self):
         self._compounds = {}
         self.skip()
-        
+
     def skip(self):
         self._previous = CompoundCandidate("", "") # dummy
 
@@ -66,7 +66,7 @@ class CompoundTracker:
             test = compound.get_stem()
             fraction = "whoops"
 
-            included = {}    
+            included = {}
             new = None
             f = compound.get_follower(terms)
             while f:
@@ -86,7 +86,7 @@ class CompoundTracker:
                     # FIXME: here we assume that the term must have
                     # more occurrences; if it doesn't, the point
                     # calculation gets screwed up
-                    fraction = (compound.get_follower_occurrences(f) / 
+                    fraction = (compound.get_follower_occurrences(f) /
                                 float(term2.get_occurrences()))
                     fraction = min(1.0, fraction) # FIXME: workaround
                 else:
@@ -120,13 +120,13 @@ class CompoundCandidate:
         self._followers = followers or {} # contains stems, not terms
         self._occurrences = occurrences
         self._test = 0
-        
+
     def get_stem(self):
         return self._stem
 
     def get_term(self):
         return self._term
-    
+
     def followed_by(self, term): # really a stem
         self._occurrences += 1
         self._followers[term] = self._followers.get(term, 0) + 1
@@ -155,7 +155,7 @@ class CompoundCandidate:
                 realterm = terms.get_term_by_stem(term)
                 if realterm and gazette.may_be_name(realterm.get_preferred()):
                     times *= 4
-               
+
             if times / self._occurrences > highest:
                 best = term
                 highest = times / self._occurrences
@@ -194,7 +194,7 @@ class Collocator:
                self._lang.is_stop_word(pair[1]):
                 continue
 
-            print "%40s %s" % (pair, count)            
+            print "%40s %s" % (pair, count)
             ix += 1
             if ix > 100:
                 break
@@ -236,7 +236,7 @@ class Term:
     def get_preferred(self):
         if not self._variants:
             return self._term
-        
+
         items = map(swap, self._variants.items())
         items.sort()
         return items[-1][1]
@@ -252,7 +252,7 @@ class Term:
 
     def get_variants(self):
         return self._variants.keys()
-    
+
     def set_score(self, score):
         self._score = score
 
@@ -274,8 +274,8 @@ class TermDatabase:
 
     def merge(self, term1, term2):
         term1.merge(term2)
-        self.remove_term(term2)        
-        
+        self.remove_term(term2)
+
     def get_terms(self):
         return self._terms.values()
 
@@ -283,10 +283,10 @@ class TermDatabase:
         termlist = sort(self._terms.values(), Term.get_score)
         termlist.reverse()
         return termlist
-        
+
     def get_term_by_stem(self, stem):
         return self._terms.get(stem)
-        
+
     def get_term(self, term, stem):
         t = self._terms.get(stem)
         if not t:
@@ -299,8 +299,8 @@ class TermDatabase:
         high = 0
         for term in self._terms.values():
             high = max(term.get_score(), high)
-        return float(high)    
-    
+        return float(high)
+
     def add_term(self, term):
         self._terms[term.get_term()] = term
 
@@ -322,7 +322,7 @@ class TermDatabase:
                               points)
             print str.encode("utf-8")
             #print "  (%s)" % string.join(term.get_variants(), ", ")
-        
+
 # --- Term extraction
 
 def extract_terms(text):
@@ -336,21 +336,25 @@ def extract_terms(text):
 
         if term:
             terms.append(term)
+
+            if term.find('-') != -1:
+                terms += term.split('-') # deal with Norwegian hyphenated words
+
             if orgterm[-1] in ".,;:":
                 # this gets discarded later, but helps us break up unwanted
                 # compounds
-                terms.append(orgterm[-1]) 
+                terms.append(orgterm[-1])
 
     return terms
 
 # --- Word filtering
 
 letters = u"abcdefghijklmnopqrstuvwxyzæøå" + u"ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ"
-    
+
 def acceptable_term(term):
     if len(term) == 1:
         return 0
-    
+
     for ch in term:
         if ch in letters:
             return 1
@@ -406,7 +410,7 @@ def topicmap_adjust(terms, lang, compounds):
         terms.remove_term(term)
         del compounds[term.get_preferred()]
         real.add_score(term.get_score())
-    
+
     # boost terms which appear in topic map
     for term in terms.get_terms():
         topic = topics.get(term.get_term())
@@ -432,7 +436,7 @@ def topicmap_adjust(terms, lang, compounds):
 
 def wordnet_adjust(terms, lang):
     "adjust terms by word class"
-   
+
     wcfact = {
         "n" : 0.8,
         "a" : 0.05,
@@ -459,14 +463,14 @@ def wordnet_adjust(terms, lang):
 
 def frequency_adjust(terms, lang):
     "adjust terms by word frequency"
-   
+
     for term in terms.get_terms():
         word = string.lower(term.get_preferred())
         term.set_score(term.get_score() * lang.get_frequency_factor(word))
-            
+
 def gazette_adjust(terms):
     "Adjust terms using a gazette."
-    
+
     for term in terms.get_terms():
         t = term.get_preferred()
         type = gazette.classify(t)
@@ -484,7 +488,7 @@ def gazette_adjust(terms):
                 # to be just 0
                 for var in other.get_variants():
                     other._variants[var] = 0
-                
+
                 terms.merge(term, other)
                 term.set_type(gazette.PERSON)
         else:
@@ -498,7 +502,7 @@ def gazette_adjust(terms):
         # kill unusable terms
         if term.get_type() in gazette.UNUSABLE:
             terms.remove_term(term)
-        
+
 def conceptnet_adjust(terms):
     termlist = map(lambda term: (term.get_preferred(), term.get_score()),
                    terms.get_terms())
@@ -548,7 +552,7 @@ def rate_terms(text):
             compounds.skip()
             collocator.skip()
             continue
-        
+
         stem = lang.get_stem(term)
         compounds.track(term, stem)
         collocator.found(term)
@@ -601,9 +605,8 @@ def process_file(filename):
 
 import formatmodules
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     # parse HTML to extract text
     for file in sys.argv[1 : ]:
         print "=====", file
         process_file(file).print_report(REPORT_TERMS)
-
