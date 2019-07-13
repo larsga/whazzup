@@ -32,7 +32,7 @@ class IPCReceivingMessageQueue:
             except sysv_ipc.ExistentialError:
                 print "  FAILED"
                 pass # we keep looking
-        
+
         if not self._mqueue:
             raise Exception("Couldn't find a free message queue key")
         else:
@@ -66,7 +66,7 @@ class IPCReceivingMessageQueue:
                 (msg, type) = self._receive()
         except sysv_ipc.BusyError:
             pass
-        
+
     def _receive(self):
         "Returns (msg, type) tuple."
         return self._mqueue.receive(False)
@@ -79,7 +79,7 @@ class IPCReceivingMessageQueue:
             return msg
         else:
             return None
-    
+
 def queue_worker():
     while not stop:
         msg = recv_mqueue.get_next_message()
@@ -146,7 +146,7 @@ class AgeSubscriptions:
             where username = %s and id = post
         """, (username, ))
         dbimpl.conn.commit()
-            
+
 class PurgePosts:
 
     def invoke(self):
@@ -177,7 +177,7 @@ class CheckFeed:
 
         url = feed.get_url()
         lastmod = feed.get_last_modified()
-        
+
         feed_queue.send((feedid, url, lastmod))
 
 class RecordFeedError:
@@ -201,23 +201,23 @@ class FeedChecked:
 
         feed.is_read_now()
         feed.save()
-        
+
 class ParseFeed:
-    
+
     def invoke(self, feedid, lastmod):
         feedid = int(feedid)
         lastmod = lastmod.replace('%', ' ')
         if lastmod == "None":
             lastmod = None
-        
+
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         if not feed: # might have been gc-ed in the meantime
             return
-        
+
         items = {} # url -> item (so we can check for new ones)
         for item in feed.get_items():
             items[item.get_link()] = item
-            
+
         # read xml
         try:
             file = os.path.join(FEED_CACHE, "feed-%s.rss" % feedid)
@@ -240,6 +240,14 @@ class ParseFeed:
                 continue
 
             parsed_date = feedlib.parse_date(newitem.get_pubdate())
+
+            # some sites give their articles a published date up to a
+            # week in the future. these articles take a week before
+            # they begin to age, staying on top of the feed for too
+            # long.  we solve that by setting their time to _now_
+            if parsed_date > datetime.datetime.utcnow():
+                parsed_date = datetime.datetime.utcnow()
+
             newposts = True
             itemobj = dbimpl.Item(None, newitem.get_title(),
                                   newitem.get_link(), newitem.get_description(),
@@ -254,7 +262,7 @@ class ParseFeed:
         feed.set_last_modified(lastmod)
         feed.is_read_now()
         feed.save()
-            
+
         # recalc all subs on this feed (if new posts, that is)
         if newposts:
             dbimpl.cur.execute("""select username from subscriptions where
@@ -265,7 +273,7 @@ class ParseFeed:
                 # that we have new posts, so we only calculate those.
                 dbimpl.mqueue.send("RecalculateSubscription %s %s 0" %
                                    (feed.get_local_id(), user))
-                
+
 class RecalculateSubscription:
 
     def invoke(self, feedid, username, recalculate_old_posts = True):
@@ -276,8 +284,8 @@ class RecalculateSubscription:
         user = dbimpl.User(username)
         feed = dbimpl.feeddb.get_feed_by_id(feedid)
         sub = dbimpl.Subscription(feed, user)
-        
-        # load all already rated posts on this subscription 
+
+        # load all already rated posts on this subscription
         ratings = {} # int(postid) -> ratedpost
         dbimpl.cur.execute("""
           select username, post, points,
@@ -308,9 +316,9 @@ class RecalculateSubscription:
                 rating = dbimpl.RatedPost(user, item, sub)
             elif not recalculate_old_posts:
                 continue # this is an old post which is already calculated
-            
+
             rating.recalculate()
-            batch.append(rating)            
+            batch.append(rating)
 
         if batch:
             dbimpl.save_batch(batch)
@@ -364,7 +372,7 @@ class RecordVote:
         user = dbimpl.User(username)
         link = user.get_rated_post_by_id(postid)
         link.seen()
-        if vote != "read":            
+        if vote != "read":
             link.record_vote(vote)
             link.get_subscription().record_vote(vote)
             # giving this message priority, so that subscriptions already
@@ -375,7 +383,7 @@ class StatsReport:
 
     def invoke(self):
         size = stats.get_queue_size_stats()
-        
+
         outf = open(os.path.join(STATS_DIR, "queue-stats.html"), "w")
         outf.write("""
         <title>Whazzup queue stats</title>
@@ -405,7 +413,7 @@ class StatsReport:
         tasks = feedlib.sort(stats.get_tasks(), TaskStats.get_sum)
         tasks.reverse()
         total = reduce(operator.add, [task.get_sum() for task in tasks], 0)
-        
+
         for task in tasks:
             outf.write("<tr><td>%s <td>%s <td>%s <td>%s <td>%s <td>%s <td>%s\n"%
                        (task.get_name(),
@@ -455,7 +463,7 @@ class MinHash:
     def invoke(self, itemid):
         item = dbimpl.feeddb.get_item_by_id(itemid)
         item.compute_minhash()
-        
+
 # ----- STATISTICS COLLECTOR
 
 class StatisticsCollector:
@@ -569,10 +577,10 @@ class DownloaderTask:
 
     def get_number(self):
         return self._number
-        
+
     def get_state(self):
         return self._state
-        
+
     def download(self):
         try:
             try:
@@ -589,12 +597,12 @@ class DownloaderTask:
             tb = sys.exc_info()[2]
             if not tb:
                 return
-            
+
             outf = open("traceback.txt", "a")
             outf.write(str(sys.exc_info()[1]) + "\n")
             traceback.print_tb(tb, 1000, outf)
             outf.close()
-        
+
     def _download(self):
         while not stop:
             self._state = "CHECKING QUEUE"
@@ -615,7 +623,7 @@ class DownloaderTask:
                 error = str(e)
                 if len(error) > 200:
                     error = error[ : 200]
-                    
+
                 dbimpl.mqueue.send("RecordFeedError %s %s" % (feedid, error))
                 continue
 
@@ -630,7 +638,7 @@ class DownloaderTask:
                 # if we didn't get anything then we can stop right here
                 dbimpl.mqueue.send("RecordFeedError %s No data" % feedid)
                 continue
-            
+
             outf = open(os.path.join(FEED_CACHE, 'feed-%s.rss' % feedid), 'w')
             outf.write(data)
             outf.close()
@@ -708,7 +716,7 @@ class DownloaderTask:
             gz = gzip.GzipFile(fileobj = StringIO.StringIO(body))
             body = gz.read()
             gz.close()
-        
+
         tuple = (body, resp.getheader("Last-Modified"))
         conn.close()
         return tuple
@@ -721,16 +729,16 @@ def escape_non_ascii(url):
         else:
             chars.append(ch)
     return "".join(chars)
-    
+
 downloaders = [DownloaderTask(no + 1) for no in range(DOWNLOAD_THREADS)]
-def start_feed_downloading():    
+def start_feed_downloading():
     for task in downloaders:
         thread = threading.Thread(target = task.download,
                                   name = "DownloadTask %s" % task.get_number())
         thread.start()
 
 feed_queue = InMemoryMessageQueue()
-        
+
 # ----- CLEAN STOPPING
 
 stop = False
