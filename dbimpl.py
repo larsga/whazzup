@@ -592,7 +592,7 @@ def save_batch(objects):
         query = query % values
 
         updatevalues = [item for row in updatebatch for item in row]
-        connpool.updates(query, updatevalues)
+        connpool.update(query, updatevalues)
 
 # ----- WORD DATABASE
 
