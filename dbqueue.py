@@ -321,7 +321,6 @@ class RecalculateSubscription:
 
         if batch:
             dbimpl.save_batch(batch)
-            dbimpl.conn.commit()
 
         return # we disable deduplication
         # now that the batch has been saved to the database we can go
@@ -449,9 +448,6 @@ class AddFeed:
         user = dbimpl.User(username)
         feed = dbimpl.feeddb.add_feed(url)
         user.subscribe(feed)
-
-        # make it all permanent
-        dbimpl.conn.commit()
 
         # now we need to download the feed
         dbimpl.mqueue.send("CheckFeed %s" % feed.get_local_id())
