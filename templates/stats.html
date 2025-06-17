@@ -1,4 +1,4 @@
-$def with (stats)
+$def with (stats, dbstats)
 
 $var url = "/stat"
 $var title = "Stats"
@@ -11,12 +11,14 @@ $ subs = stats.get_subscription_count()
 <table>
 <tr><th>Users         <td>$(stats.get_user_count())
 <tr><th>Feeds         <td>$(feeds)
-<tr><th>Posts         <td>$(stats.get_post_count())      
+<tr><th>Posts         <td>$(stats.get_post_count())
 <tr><th>Subscriptions <td>$(subs)
                           ($(int((feeds / float(subs)) * 1000) / 1000.0) %)
 <tr><th>Rated posts   <td>$(stats.get_rated_posts_count())
 <tr><th>Read posts    <td>$(stats.get_read_posts_count())
-<tr><th>Notifications <td>$(stats.get_notification_count())      
+<tr><th>Notifications <td>$(stats.get_notification_count())
+<tr><th>Free connections <td>$(dbstats['free_cursors'])
+<tr><th>Used connections <td>$(dbstats['outside_cursors'])
 </table>
 
 <!-- feeds with errors -->

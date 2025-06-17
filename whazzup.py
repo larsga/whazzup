@@ -471,7 +471,7 @@ class Stats:
 
         admin_only(user)
 
-        return render.stats(feeddb)
+        return render.stats(feeddb, dbimpl.connpool.get_stats())
 
 # --- SETUP
 
