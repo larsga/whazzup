@@ -113,7 +113,7 @@ def queue_worker():
 class FindFeedsToCheck:
 
     def invoke(self):
-        dbimpl.cur.execute("""
+        theids = dbimpl.connpool.query_for_list("""
           select id from feeds where
             (error is null and (last_read is null or
                      last_read + (time_to_wait * interval '1 second') < now()))
@@ -121,14 +121,13 @@ class FindFeedsToCheck:
             (error is not null and
              last_error + (time_to_wait * interval '1 second') < now())
         """)
-        for (id) in dbimpl.cur.fetchall():
-            dbimpl.mqueue.send("CheckFeed %s" % id)
+        for theid in theids:
+            dbimpl.mqueue.send("CheckFeed %s" % theid)
 
 class AgePosts:
 
     def invoke(self):
-        dbimpl.cur.execute("select username from users")
-        for row in dbimpl.cur.fetchall():
+        for row in dbimpl.connpool.query_for_list("select username from users"):
             dbimpl.mqueue.send("AgeSubscriptions %s" % row)
 
 class AgeSubscriptions:
@@ -136,7 +135,7 @@ class AgeSubscriptions:
     def invoke(self, username):
         # we're doing the whole aging of posts in SQL, hoping that this
         # will be faster than the old approach.
-        dbimpl.update("""
+        dbimpl.connpool.update("""
           update rated_posts
             set points = (prob * 1000.0) / ln(
               case when extract(epoch from age(pubdate)) <= 3 then 3600
@@ -145,12 +144,11 @@ class AgeSubscriptions:
             from posts
             where username = %s and id = post
         """, (username, ))
-        dbimpl.conn.commit()
 
 class PurgePosts:
 
     def invoke(self):
-        for feedid in dbimpl.query_for_list("select id from feeds", ()):
+        for feedid in dbimpl.connpool.query_for_list("select id from feeds", ()):
             dbimpl.mqueue.send("PurgeFeed %s" % feedid)
 
 class PurgeFeed:
@@ -265,9 +263,10 @@ class ParseFeed:
 
         # recalc all subs on this feed (if new posts, that is)
         if newposts:
-            dbimpl.cur.execute("""select username from subscriptions where
-                               feed = %s""", (feed.get_local_id(), ))
-            for (user, ) in dbimpl.cur.fetchall():
+            users = dbimpl.connpool.query_for_list(
+                """select username from subscriptions where
+                feed = %s""", (feed.get_local_id(), ))
+            for user in users:
                 # 0 means we don't recalculate old posts. scores
                 # haven't changed.  the only thing that's changed is
                 # that we have new posts, so we only calculate those.
@@ -287,7 +286,7 @@ class RecalculateSubscription:
 
         # load all already rated posts on this subscription
         ratings = {} # int(postid) -> ratedpost
-        dbimpl.cur.execute("""
+        rows = dbimpl.connpool.query_for_rows("""
           select username, post, points,
                  id, title, link, descr, pubdate, author
           from rated_posts r
@@ -295,15 +294,15 @@ class RecalculateSubscription:
           where username = %s and r.feed = %s
         """, (username, feedid))
         for (username, postid, points,
-             id, title, link, descr, date, author) in dbimpl.cur.fetchall():
+             id, title, link, descr, date, author) in rows:
             post = dbimpl.Item(id, title, link, descr, date, author, feed, None)
             ratings[postid] = dbimpl.RatedPost(user, post, sub, points)
 
         # load all seen posts
-        seen = dbimpl.query_for_set("""
+        seen = set(dbimpl.connpool.query_for_list("""
           select post from read_posts
           where username = %s and feed = %s
-        """, (username, feedid))
+        """, (username, feedid)))
 
         batch = []
         for item in feed.get_items():
@@ -349,9 +348,9 @@ class RecalculateSubscription:
 class RecalculateAllPosts:
 
     def invoke(self, username):
-        allsubs = dbimpl.query_for_list("""select feed from subscriptions
-                                           where username = %s""",
-                                        (username, ))
+        allsubs = dbimpl.connpool.query_for_list(
+            """select feed from subscriptions where username = %s""",
+            (username, ))
         for feedid in allsubs:
             dbimpl.mqueue.send("RecalculateSubscription %s %s" %
                                (feedid, username))
@@ -359,12 +358,11 @@ class RecalculateAllPosts:
 class RemoveDeadFeeds:
 
     def invoke(self):
-        for feedid in dbimpl.query_for_list("""
+        for feedid in dbimpl.connpool.query_for_list("""
              select id from feeds where not exists
                (select * from subscriptions where feed = id)
            """, ()):
-            dbimpl.update("delete from feeds where id = %s", (feedid, ))
-        dbimpl.conn.commit()
+            dbimpl.connpool.update("delete from feeds where id = %s", (feedid, ))
 
 class RecordVote:
 

@@ -14,57 +14,6 @@ except ImportError:
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
-# ----- DATABASE CONNECTION WRAPPER
-
-class DatabaseConnection:
-    'This exists mostly to ensure that we handle database connections breaking.'
-
-    def __init__(self, connstr):
-        self._connstr = connstr
-        self._conn = psycopg2.connect(self._connstr)
-        self._cur = self._conn.cursor()
-
-    def query_for_value(self, query, args = ()):
-        self._cur.execute(query, args)
-        row = self._cur.fetchone()
-        if row:
-            return row[0]
-        else:
-            return None
-
-    def query_for_row(self, query, args = ()):
-        self._cur.execute(query, args)
-        return self._cur.fetchone()
-
-    def query_for_rows(self, query, args = ()):
-        self._cur.execute(query, args)
-        return self._cur.fetchall()
-
-    def update(self, query, args):
-        self._cur.execute(query, args)
-
-    def query_for_set(self, query, args):
-        self._cur.execute(query, args)
-        return set([row[0] for row in self._cur.fetchall()])
-
-    def query_for_list(self, query, args):
-        self._cur.execute(query, args)
-        return [row[0] for row in self._cur.fetchall()]
-
-    def commit(self):
-        self._conn.commit()
-
-    def _execute(self, query, args):
-        try:
-            self._cur.execute(query, args)
-        except psycopg2.OperationalError, e:
-            print 'DB error', e
-
-            # reconnecting to see if that solves the problem
-            self._conn = psycopg2.connect(self._connstr)
-            self._cur = conn.cursor()
-            self._cur.execute(query, args)
-
 # ----- MINHASHING
 
 def hash2(str):
