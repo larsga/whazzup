@@ -239,7 +239,7 @@ class Feed(feedlib.Feed):
         if self._link and len(self._link) > 200:
             self._link = None # there have to be limits...
 
-        dbimpl.connpool.update("""update feeds set title = %s, htmlurl = %s,
+        connpool.update("""update feeds set title = %s, htmlurl = %s,
                            last_read = %s, error = %s, last_error = %s,
                            max_posts = %s, last_modified = %s
                   where id = %s""",
@@ -271,7 +271,7 @@ class Feed(feedlib.Feed):
                                (user.get_username(), self._id))
 
     def delete(self):
-        dbimpl.connpool.update('delete from feeds where id = %s', (self._id, ))
+        connpool.update('delete from feeds where id = %s', (self._id, ))
 
 class Item(feedlib.Post):
 
@@ -341,7 +341,7 @@ class Item(feedlib.Post):
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
 
-        dbimpl.connpool.update("""
+        connpool.update("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s, NULL)
        """, (self._title, self._link, self._descr, self.get_date(),
               self._author, self._feed.get_local_id()))
@@ -354,13 +354,13 @@ class Item(feedlib.Post):
         vector = self.get_vector().get_keys()
         if len(vector) > 5:
             mh = minhash(vector)
-            dbimpl.connpool.update('update posts set minhash = %s where id = %s',
+            connpool.update('update posts set minhash = %s where id = %s',
                    (mh, self._id))
 
     def delete(self):
-        dbimpl.connpool.update("delete from read_posts where post = %s", (self._id, ))
-        dbimpl.connpool.update("delete from rated_posts where post = %s", (self._id, ))
-        dbimpl.connpool.update("delete from posts where id = %s", (self._id, ))
+        connpool.update("delete from read_posts where post = %s", (self._id, ))
+        connpool.update("delete from rated_posts where post = %s", (self._id, ))
+        connpool.update("delete from posts where id = %s", (self._id, ))
 
         filename = os.path.join(VECTOR_CACHE_DIR, str(self.get_local_id()))
         try:
@@ -426,9 +426,9 @@ class Subscription(feedlib.Subscription):
     def unsubscribe(self):
         key = (self._user.get_username(), int(self._feed.get_local_id()))
 
-        dbimpl.connpool.update("delete from read_posts where username = %s and feed = %s", key)
-        dbimpl.connpool.update("delete from rated_posts where username = %s and feed = %s", key)
-        dbimpl.connpool.update("delete from subscriptions where username = %s and feed = %s", key)
+        connpool.update("delete from read_posts where username = %s and feed = %s", key)
+        connpool.update("delete from rated_posts where username = %s and feed = %s", key)
+        connpool.update("delete from subscriptions where username = %s and feed = %s", key)
 
     def record_vote(self, vote):
         if self._up is None:
@@ -443,7 +443,7 @@ class Subscription(feedlib.Subscription):
         else:
             self._down += 1
 
-        dbimpl.connpool.update("""update subscriptions set up = %s, down = %s
+        connpool.update("""update subscriptions set up = %s, down = %s
                   where username = %s and feed = %s""",
                (self._up, self._down, self._user.get_username(),
                 int(self._feed.get_local_id())))
@@ -464,12 +464,12 @@ class RatedPost(feedlib.RatedPost):
 
     def seen(self):
         # first remove the rating
-        dbimpl.connpool.update("delete from rated_posts where username = %s and post = %s",
+        connpool.update("delete from rated_posts where username = %s and post = %s",
                (self._user.get_username(), int(self._post.get_local_id())))
 
         # then make a note that we've read it
         try:
-            dbimpl.connpool.update("insert into read_posts values (%s, %s, %s)",
+            connpool.update("insert into read_posts values (%s, %s, %s)",
                    (self._user.get_username(), int(self._post.get_local_id()),
                     int(self._subscription.get_feed().get_local_id())))
         except psycopg2.IntegrityError, e:
@@ -484,13 +484,13 @@ class RatedPost(feedlib.RatedPost):
 
     def save(self):
         if self._exists_in_db:
-            dbimpl.connpool.update("""update rated_posts set points = %s, last_recalc = now(),
+            connpool.update("""update rated_posts set points = %s, last_recalc = now(),
                                              prob = %s
                       where username = %s and post = %s""",
                    (self._points, self._prob, self._user.get_username(),
                     int(self._post.get_local_id())))
         else:
-            dbimpl.connpool.update("insert into rated_posts values (%s, %s, %s, %s, now(), %s)",
+            connpool.update("insert into rated_posts values (%s, %s, %s, %s, now(), %s)",
                    (self._user.get_username(),
                     int(self._post.get_local_id()),
                     int(self.get_subscription().get_feed().get_local_id()),
@@ -579,7 +579,7 @@ def save_batch(objects):
         query = query % values
 
         insertvalues = [item for row in insertbatch for item in row]
-        dbimpl.connpool.update(query, insertvalues)
+        connpool.update(query, insertvalues)
 
     if updatebatch:
         query = """update rated_posts
@@ -592,7 +592,7 @@ def save_batch(objects):
         query = query % values
 
         updatevalues = [item for row in updatebatch for item in row]
-        dbimpl.connpool.updates(query, updatevalues)
+        connpool.updates(query, updatevalues)
 
 # ----- WORD DATABASE
 
@@ -668,7 +668,7 @@ class UserDatabase:
 
     def set_password(self, username, password):
         passhash = crypt(password)
-        dbimpl.connpool.update("update users set password = %s where username = %s",
+        connpool.update("update users set password = %s where username = %s",
                       (passhash, username))
 
 # ----- USER OBJECT
@@ -752,7 +752,7 @@ class User(feedlib.User):
         # if user is not already subscribed, add subscription
         if not connpool.query_for_value("""select * from subscriptions where
                             feed = %s and username = %s""", key):
-            dbimpl.connpool.update("insert into subscriptions values (%s, %s)", key)
+            connpool.update("insert into subscriptions values (%s, %s)", key)
 
     def get_subscription(self, feedid):
         feed = feeddb.get_feed_by_id(feedid)
