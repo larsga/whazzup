@@ -26,7 +26,7 @@ class QueueTest(unittest.TestCase):
                 # need to send another message to flush them out.
                 dbimpl.mqueue.send("flush")
                 msg = dbqueue.recv_mqueue.get_next_message()
-            
+
             self.assertEqual(msg, "foo %s" % ix)
 
         msg = dbqueue.recv_mqueue.get_next_message()
@@ -69,7 +69,53 @@ class DateParsingTest(unittest.TestCase):
     def test_format_5(self):
         date = feedlib.parse_date('2011-10-21T17:30:00Z')
         self.assertEqual(str(date), '2011-10-21 17:30:00')
-        
+
+# ===========================================================================
+# FEED DATABASE
+
+class FeedDatabaseTest(unittest.TestCase):
+
+    def setUp(self):
+        # empty the database
+        dbimpl.dbconn.update('delete from feeds', None)
+        dbimpl.dbconn.commit()
+
+    def test_user_count(self):
+        self.assertEqual(0, dbimpl.feeddb.get_user_count())
+
+    def test_feed_count(self):
+        self.assertEqual(0, dbimpl.feeddb.get_feed_count())
+
+    def test_post_count(self):
+        self.assertEqual(0, dbimpl.feeddb.get_post_count())
+
+    def test_rated_posts_count(self):
+        self.assertEqual(0, dbimpl.feeddb.get_rated_posts_count())
+
+    def test_read_posts_count(self):
+        self.assertEqual(0, dbimpl.feeddb.get_read_posts_count())
+
+    def test_notification_count(self):
+        self.assertEqual(0, dbimpl.feeddb.get_notification_count())
+
+    def test_add_feed(self):
+        feeddb = dbimpl.feeddb
+
+        feed = feeddb.add_feed('http://test.no')
+        dbimpl.dbconn.commit()
+        self.assertEqual(1, feeddb.get_feed_count())
+
+        feed2 = feeddb.get_feed_by_id(feed.get_local_id())
+        self.assertEqual(feed.get_url(), feed2.get_url())
+        self.assertEqual(0, feed2.get_item_count())
+        feed.delete()
+        dbimpl.dbconn.commit()
+
+        self.assertEqual(0, feeddb.get_feed_count())
+
+        feed2 = feeddb.get_feed_by_id(feed.get_local_id())
+        self.assertEqual(None, feed2)
+
 # ===========================================================================
 # MAIN
 

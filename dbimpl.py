@@ -2,6 +2,7 @@
 import datetime, hashlib, smtplib, marshal, os, binascii, sys, operator
 import psycopg2, sysv_ipc
 import psycopg2.extensions
+import cpool
 import feedlib, vectors
 from config import *
 
@@ -13,26 +14,56 @@ except ImportError:
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
-# ----- UTILITIES
+# ----- DATABASE CONNECTION WRAPPER
 
-def query_for_value(query, args = ()):
-    cur.execute(query, args)
-    row = cur.fetchone()
-    if row:
-        return row[0]
-    else:
-        return None
+class DatabaseConnection:
+    'This exists mostly to ensure that we handle database connections breaking.'
 
-def update(query, args):
-    cur.execute(query, args)
+    def __init__(self, connstr):
+        self._connstr = connstr
+        self._conn = psycopg2.connect(self._connstr)
+        self._cur = self._conn.cursor()
 
-def query_for_set(query, args):
-    cur.execute(query, args)
-    return set([row[0] for row in cur.fetchall()])
+    def query_for_value(self, query, args = ()):
+        self._cur.execute(query, args)
+        row = self._cur.fetchone()
+        if row:
+            return row[0]
+        else:
+            return None
 
-def query_for_list(query, args):
-    cur.execute(query, args)
-    return [row[0] for row in cur.fetchall()]
+    def query_for_row(self, query, args = ()):
+        self._cur.execute(query, args)
+        return self._cur.fetchone()
+
+    def query_for_rows(self, query, args = ()):
+        self._cur.execute(query, args)
+        return self._cur.fetchall()
+
+    def update(self, query, args):
+        self._cur.execute(query, args)
+
+    def query_for_set(self, query, args):
+        self._cur.execute(query, args)
+        return set([row[0] for row in self._cur.fetchall()])
+
+    def query_for_list(self, query, args):
+        self._cur.execute(query, args)
+        return [row[0] for row in self._cur.fetchall()]
+
+    def commit(self):
+        self._conn.commit()
+
+    def _execute(self, query, args):
+        try:
+            self._cur.execute(query, args)
+        except psycopg2.OperationalError, e:
+            print 'DB error', e
+
+            # reconnecting to see if that solves the problem
+            self._conn = psycopg2.connect(self._connstr)
+            self._cur = conn.cursor()
+            self._cur.execute(query, args)
 
 # ----- MINHASHING
 
@@ -89,7 +120,7 @@ class Controller(feedlib.Controller):
         sub = user.get_subscription(feedid)
         sub.unsubscribe()
         # make it all permanent
-        conn.commit()
+        dbconn.commit()
 
     def send_user_password(self, username, email, password):
         conn = smtplib.SMTP()
@@ -113,13 +144,13 @@ class FeedDatabase(feedlib.Database):
 
     def add_feed(self, url):
         # does the feed exist already?
-        feedid = query_for_value("""
+        feedid = connpool.query_for_value("""
         select id from feeds where xmlurl = %s
         """, (url, ))
 
         # if not, add it now
         if not feedid:
-            feedid = query_for_value("""
+            feedid = connpool.query_for_value("""
             insert into feeds (xmlurl, time_to_wait) values (%s, 10800)
               returning id
             """, (url, ))
@@ -128,8 +159,8 @@ class FeedDatabase(feedlib.Database):
 
     def get_item_by_id(self, itemid):
         itemid = int(itemid)
-        cur.execute("select * from posts where id = %s", (itemid, ))
-        row = cur.fetchone()
+        row = connpool.query_for_row("select * from posts where id = %s",
+                                   (itemid, ))
         if not row:
             return None
         (id, title, link, descr, date, author, feedid, minhash) = row
@@ -137,8 +168,8 @@ class FeedDatabase(feedlib.Database):
                     self.get_feed_by_id(feedid), minhash)
 
     def get_feed_by_id(self, id):
-        cur.execute("select * from feeds where id = %s", (int(id), ))
-        row = cur.fetchone()
+        row = connpool.query_for_row("select * from feeds where id = %s",
+                                   (int(id), ))
         if row:
             (id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
              last_error, max_posts, time_added, last_modified) = row
@@ -151,7 +182,8 @@ class FeedDatabase(feedlib.Database):
         # may consider using sum of ratios for sorting instead of the count
         # of subscribers
         # sum((up + 5) / cast((up + down + 10) as float))
-        cur.execute("""select id, title, xmlurl, htmlurl, last_read, max_posts, last_modified, count(username) as subs
+        rows = connpool.query_for_rows("""
+              select id, title, xmlurl, htmlurl, last_read, max_posts, last_modified, count(username) as subs
                        from feeds
                        join subscriptions on id = feed
                        group by id, title, last_read, xmlurl, htmlurl,
@@ -161,28 +193,28 @@ class FeedDatabase(feedlib.Database):
                      maxposts, lastmod, subs)
                 for (feedid, title, xmlurl, htmlurl, lastread, maxposts,
                      lastmod, subs)
-                in cur.fetchall()]
+                in rows]
 
     def get_user_count(self):
-        return query_for_value("select count(*) from users")
+        return connpool.query_for_value("select count(*) from users")
 
     def get_feed_count(self):
-        return query_for_value("select count(*) from feeds")
+        return connpool.query_for_value("select count(*) from feeds")
 
     def get_post_count(self):
-        return query_for_value("select count(*) from posts")
+        return connpool.query_for_value("select count(*) from posts")
 
     def get_subscription_count(self):
-        return query_for_value("select count(*) from subscriptions")
+        return connpool.query_for_value("select count(*) from subscriptions")
 
     def get_rated_posts_count(self):
-        return query_for_value("select count(*) from rated_posts")
+        return connpool.query_for_value("select count(*) from rated_posts")
 
     def get_read_posts_count(self):
-        return query_for_value("select count(*) from read_posts")
+        return connpool.query_for_value("select count(*) from read_posts")
 
     def get_notification_count(self):
-        return query_for_value("select count(*) from notify")
+        return connpool.query_for_value("select count(*) from notify")
 
 class Feed(feedlib.Feed):
 
@@ -213,16 +245,16 @@ class Feed(feedlib.Feed):
         return self._link
 
     def get_items(self):
-        cur.execute("""
+        rows = connpool.query_for_rows("""
         select * from posts where feed = %s order by pubdate desc
         """, (self._id, ))
         return [Item(id, title, link, descr, pubdate, author, self, mh) for
                 (id, title, link, descr, pubdate, author, feed, mh) in
-                cur.fetchall()]
+                rows]
 
     def get_item_count(self):
-        return query_for_value("select count(*) from posts where feed = %s",
-                               (self._id, ))
+        return connpool.query_for_value(
+            "select count(*) from posts where feed = %s", (self._id, ))
 
     def get_error(self):
         return self._error
@@ -260,13 +292,13 @@ class Feed(feedlib.Feed):
         if self._link and len(self._link) > 200:
             self._link = None # there have to be limits...
 
-        update("""update feeds set title = %s, htmlurl = %s, last_read = %s,
-                                   error = %s, last_error = %s, max_posts = %s,
-                                   last_modified = %s
+        dbconn.update("""update feeds set title = %s, htmlurl = %s,
+                           last_read = %s, error = %s, last_error = %s,
+                           max_posts = %s, last_modified = %s
                   where id = %s""",
                (self._title, self._link, self._lastread, self._error,
                 self._lasterror, self._maxposts, self._lastmod, self._id))
-        conn.commit()
+        dbconn.commit()
 
     def get_max_posts(self):
         return self._maxposts
@@ -288,9 +320,13 @@ class Feed(feedlib.Feed):
         return self._lastmod
 
     def is_subscribed(self, user):
-        return query_for_value("""select username from subscriptions
+        return connpool.query_for_value("""select username from subscriptions
                                   where username = %s and feed = %s""",
                                (user.get_username(), self._id))
+
+    def delete(self):
+        dbconn.update('delete from feeds where id = %s', (self._id, ))
+        dbconn.commit()
 
 class Item(feedlib.Post):
 
@@ -360,14 +396,13 @@ class Item(feedlib.Post):
         if self._author and len(self._author) > 100:
             self._author = self._author[ : 100]
 
-        cur.execute("""
+        dbconn.update("""
         insert into posts values (default, %s, %s, %s, %s, %s, %s, NULL)
        """, (self._title, self._link, self._descr, self.get_date(),
               self._author, self._feed.get_local_id()))
-        conn.commit()
+        dbconn.commit()
 
-        cur.execute("SELECT currval(pg_get_serial_sequence('posts', 'id'))")
-        self._id = cur.fetchone()
+        self._id = connpool.query_for_value("SELECT currval(pg_get_serial_sequence('posts', 'id'))")
         mqueue.send('MinHash %s' % self._id)
 
     def compute_minhash(self):
@@ -375,15 +410,15 @@ class Item(feedlib.Post):
         vector = self.get_vector().get_keys()
         if len(vector) > 5:
             mh = minhash(vector)
-            update('update posts set minhash = %s where id = %s',
+            dbconn.update('update posts set minhash = %s where id = %s',
                    (mh, self._id))
-            conn.commit()
+            dbconn.commit()
 
     def delete(self):
-        update("delete from read_posts where post = %s", (self._id, ))
-        update("delete from rated_posts where post = %s", (self._id, ))
-        update("delete from posts where id = %s", (self._id, ))
-        conn.commit()
+        dbconn.update("delete from read_posts where post = %s", (self._id, ))
+        dbconn.update("delete from rated_posts where post = %s", (self._id, ))
+        dbconn.update("delete from posts where id = %s", (self._id, ))
+        dbconn.commit()
 
         filename = os.path.join(VECTOR_CACHE_DIR, str(self.get_local_id()))
         try:
@@ -393,7 +428,7 @@ class Item(feedlib.Post):
                 raise e
 
     def is_seen(self, user):
-        return query_for_value("""select post from read_posts
+        return connpool.query_for_value("""select post from read_posts
                                   where username = %s and post = %s""",
                                (user.get_username(), self._id))
 
@@ -427,12 +462,13 @@ class Subscription(feedlib.Subscription):
         return self._feed
 
     def get_rated_posts(self):
-        cur.execute("""select post, points, prob from rated_posts
+        rows = connpool.query_for_rows("""
+                    select post, points, prob from rated_posts
                     where username = %s and feed = %s""",
                     (self._user.get_username(), int(self._feed.get_local_id())))
         return [RatedPost(self._user,
                           feeddb.get_item_by_id(postid), self, points, prob)
-                for (postid, points, prob) in cur.fetchall()]
+                for (postid, points, prob) in rows]
 
     def get_user(self):
         return self._user
@@ -448,10 +484,10 @@ class Subscription(feedlib.Subscription):
     def unsubscribe(self):
         key = (self._user.get_username(), int(self._feed.get_local_id()))
 
-        update("delete from read_posts where username = %s and feed = %s", key)
-        update("delete from rated_posts where username = %s and feed = %s", key)
-        update("delete from subscriptions where username = %s and feed = %s", key)
-        conn.commit()
+        dbconn.update("delete from read_posts where username = %s and feed = %s", key)
+        dbconn.update("delete from rated_posts where username = %s and feed = %s", key)
+        dbconn.update("delete from subscriptions where username = %s and feed = %s", key)
+        dbconn.commit()
 
     def record_vote(self, vote):
         if self._up is None:
@@ -466,18 +502,17 @@ class Subscription(feedlib.Subscription):
         else:
             self._down += 1
 
-        update("""update subscriptions set up = %s, down = %s
+        dbconn.update("""update subscriptions set up = %s, down = %s
                   where username = %s and feed = %s""",
                (self._up, self._down, self._user.get_username(),
                 int(self._feed.get_local_id())))
-        conn.commit()
+        dbconn.commit()
 
     def _load_counts(self):
-        cur.execute("""select up, down from subscriptions
+        row = connpool.query_for_row("""select up, down from subscriptions
                        where username = %s and feed = %s""",
                     (self._user.get_username(),
                      int(self._feed.get_local_id())))
-        row = cur.fetchone()
         if row:
             (self._up, self._down) = row
 
@@ -489,12 +524,12 @@ class RatedPost(feedlib.RatedPost):
 
     def seen(self):
         # first remove the rating
-        update("delete from rated_posts where username = %s and post = %s",
+        dbconn.update("delete from rated_posts where username = %s and post = %s",
                (self._user.get_username(), int(self._post.get_local_id())))
 
         # then make a note that we've read it
         try:
-            update("insert into read_posts values (%s, %s, %s)",
+            dbconn.update("insert into read_posts values (%s, %s, %s)",
                    (self._user.get_username(), int(self._post.get_local_id()),
                     int(self._subscription.get_feed().get_local_id())))
         except psycopg2.IntegrityError, e:
@@ -502,7 +537,7 @@ class RatedPost(feedlib.RatedPost):
             # and carry on.
             print str(e)
 
-        conn.commit()
+        dbconn.commit()
 
     def age(self):
         self._points = feedlib.calculate_points(self.get_overall_probability(),
@@ -511,13 +546,13 @@ class RatedPost(feedlib.RatedPost):
 
     def save(self):
         if self._exists_in_db:
-            update("""update rated_posts set points = %s, last_recalc = now(),
+            dbconn.update("""update rated_posts set points = %s, last_recalc = now(),
                                              prob = %s
                       where username = %s and post = %s""",
                    (self._points, self._prob, self._user.get_username(),
                     int(self._post.get_local_id())))
         else:
-            update("insert into rated_posts values (%s, %s, %s, %s, now(), %s)",
+            dbconn.update("insert into rated_posts values (%s, %s, %s, %s, now(), %s)",
                    (self._user.get_username(),
                     int(self._post.get_local_id()),
                     int(self.get_subscription().get_feed().get_local_id()),
@@ -540,14 +575,14 @@ class RatedPost(feedlib.RatedPost):
 
         username = self._user.get_username()
         post = self.get_post()
-        cur.execute('''select p.id
+        rows = connpool.query_for_rows('''select p.id
                        from posts p
                        join read_posts r on p.id = r.post
                        where r.username = %s and
                              (link = %s or minhash = %s)''',
                     (username, post.get_link(), post.get_minhash()))
 
-        return bool(cur.fetchall())
+        return bool(rows)
 
     def find_dupes(self):
         '''Returns RatedPost objects (for the same user) for other
@@ -556,7 +591,7 @@ class RatedPost(feedlib.RatedPost):
 
         username = self._user.get_username()
         post = self.get_post()
-        cur.execute('''select p.id, p.feed
+        rows = connpool.query_for_rows('''select p.id, p.feed
                        from posts p
                        join rated_posts r on p.id = r.post
                        where r.username = %s and
@@ -566,7 +601,7 @@ class RatedPost(feedlib.RatedPost):
 
         seen_feeds = set()
         dupes = []
-        for (id, feed) in cur.fetchall():
+        for (id, feed) in rows:
             if feed in seen_feeds:
                 continue # we don't dupe posts if they are from the same feed
 
@@ -606,7 +641,7 @@ def save_batch(objects):
         query = query % values
 
         insertvalues = [item for row in insertbatch for item in row]
-        cur.execute(query, insertvalues)
+        dbconn.update(query, insertvalues)
 
     if updatebatch:
         query = """update rated_posts
@@ -619,7 +654,7 @@ def save_batch(objects):
         query = query % values
 
         updatevalues = [item for row in updatebatch for item in row]
-        cur.execute(query, updatevalues)
+        dbconn.updates(query, updatevalues)
 
 # ----- WORD DATABASE
 
@@ -668,37 +703,36 @@ class UserDatabase:
         return "/login"
 
     def accounts_available(self):
-        accounts = query_for_value("select count(*) from users", ())
+        accounts = connpool.query_for_value("select count(*) from users", ())
         return accounts < MAX_USERS
 
     def set_session(self, session):
         self._session = session
 
     def user_exists(self, username):
-        return query_for_value("""select username from users where
-                                    username = %s""", (username, ))
+        return connpool.query_for_value("""select username from users where
+                                           username = %s""", (username, ))
 
     def verify_credentials(self, username, password):
         passhash = crypt(password)
-        return query_for_value("""select username from users where
+        return connpool.query_for_value("""select username from users where
                                     username = %s and password = %s""",
                                (username, passhash))
 
     def create_user(self, username, password, email):
         passhash = crypt(password)
-        update("insert into users values (%s, %s, %s)",
-               (username, passhash, email))
-        conn.commit()
+        connpool.update("insert into users values (%s, %s, %s)",
+                        (username, passhash, email))
 
     def find_user(self, email):
-        return query_for_value("select username from users where email = %s",
-                               (email, ))
+        return connpool.query_for_value(
+            "select username from users where email = %s", (email, ))
 
     def set_password(self, username, password):
         passhash = crypt(password)
-        update("update users set password = %s where username = %s",
-               (passhash, username))
-        conn.commit()
+        dbconn.update("update users set password = %s where username = %s",
+                      (passhash, username))
+        dbconn.commit()
 
 # ----- USER OBJECT
 
@@ -713,7 +747,7 @@ class User(feedlib.User):
         return self._username
 
     def get_feeds(self):
-        cur.execute("""
+        rows = connpool.query_for_rows("""
           select id, title, xmlurl, htmlurl, error, time_to_wait, last_read,
                  last_error, max_posts, last_modified, up, down
           from feeds
@@ -726,19 +760,19 @@ class User(feedlib.User):
                              self, up, down)
                 for (id, title, xmlurl, htmlurl, error, time_to_wait,
                      last_read, last_error, maxposts, lastmod, up, down)
-                in cur.fetchall()]
+                in rows]
         subs = feedlib.sort(subs, Subscription.get_ratio)
         subs.reverse()
         return subs
 
     def get_item_count(self):
-        return query_for_value("""
+        return connpool.query_for_value("""
                select count(*) from rated_posts where username = %s
                """, [self._username])
 
     def get_item_range(self, low, high):
         # FIXME: this is both performance-critical and slow...
-        cur.execute("""
+        rows = connpool.query_for_rows("""
           select id, title, link, descr, pubdate, author, p.feed
           from posts p
           join rated_posts on id = post
@@ -748,7 +782,7 @@ class User(feedlib.User):
         return [Item(id, title, link, descr, date, author,
                      feeddb.get_feed_by_id(feed), None) for
                 (id, title, link, descr, date, author, feed) in
-                cur.fetchall()]
+                rows]
 
     def get_rated_post_by_id(self, itemid):
         item = feeddb.get_item_by_id(itemid)
@@ -779,9 +813,9 @@ class User(feedlib.User):
         key = (int(feed.get_local_id()), self._username)
 
         # if user is not already subscribed, add subscription
-        if not query_for_value("""select * from subscriptions where
+        if not connpool.query_for_value("""select * from subscriptions where
                             feed = %s and username = %s""", key):
-            update("insert into subscriptions values (%s, %s)", key)
+            dbconn.update("insert into subscriptions values (%s, %s)", key)
 
     def get_subscription(self, feedid):
         feed = feeddb.get_feed_by_id(feedid)
@@ -845,6 +879,8 @@ controller = Controller()
 feeddb = FeedDatabase()
 feedlib.feeddb = feeddb # let's call it dependency injection, so it's cool
 
-conn = psycopg2.connect(DB_CONNECT_STRING)
-cur = conn.cursor()
+connpool = cpool.ConnectionPool(
+    lambda: psycopg2.connect(DB_CONNECT_STRING),
+    maxconns = 3
+)
 mqueue = SendingMessageQueue()

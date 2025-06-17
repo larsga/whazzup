@@ -23,7 +23,7 @@ create table posts (
   feed int not null,
   minhash bigint
 );
-create index rated_posts_minhash on rated_posts (minhash);
+--create index rated_posts_minhash on rated_posts (minhash);
 create index posts_link on posts (link);
 
 create table subscriptions (

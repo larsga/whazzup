@@ -71,7 +71,7 @@ class List:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-            
+
         low = page * 25
         high = low + 25
         return render.storylist(page, low, high, user)
@@ -82,7 +82,7 @@ class List:
             return "Thread is OK (%s)" % int(wait)
         else:
             return 'Thread is dead (%s) <a href="/start-thread">restart</a>' % int(wait)
-        
+
 class SiteReport:
     def GET(self, id):
         nocache()
@@ -90,13 +90,13 @@ class SiteReport:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
+
         feed = feeddb.get_feed_by_id(id)
         return render.sitereport(feed,
                                  controller.in_appengine(),
                                  controller.is_single_user(),
                                  user)
-            
+
 class UpdateSite:
     def POST(self, id):
         nocache()
@@ -109,7 +109,7 @@ class UpdateSite:
 
         if feed.get_url() != url:
             feed.set_url(url)
-        
+
         feeddb.save()
         return "<p>Updated.</p>"
 
@@ -123,7 +123,7 @@ class DeleteSite:
 
         controller.unsubscribe(id, user)
         web.seeother(web.ctx.homedomain + "/sites")
-        
+
 class Sites:
     def GET(self):
         nocache()
@@ -131,7 +131,7 @@ class Sites:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
+
         return render.sites(user.get_feeds(),
                             controller.in_appengine(),
                             controller.is_single_user())
@@ -143,7 +143,7 @@ class PopularSites:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
+
         feeds = feeddb.get_popular_feeds()
         return render.popular(feeds, user)
 
@@ -170,7 +170,7 @@ class MarkAsRead:
 
         controller.mark_as_read(user, ids.split(","))
         web.seeother(get_return_url())
-        
+
 class ShowItem:
     def GET(self, id):
         nocache()
@@ -185,7 +185,7 @@ class ShowItem:
                                controller.is_single_user())
         except KeyError, e:
             return "No such item: " + repr(id)
-        
+
 class Reload:
     def GET(self):
         nocache()
@@ -199,7 +199,7 @@ class ImportOPML:
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
+
         thefile = web.input()["opml"]
         inf = StringIO.StringIO(thefile)
         feeds = rsslib.read_opml(inf)
@@ -208,15 +208,15 @@ class ImportOPML:
         for newfeed in feeds.get_feeds():
             if newfeed.get_url(): # FIXME: ugly workaround
                 controller.add_feed(newfeed.get_url(), user)
-        
+
         return "<p>Imported.</p>"
-    
+
 class AddFeed:
     def POST(self):
         user = users.get_current_user()
         if not user:
             return render.not_logged_in(users.create_login_url("/"))
-        
+
         url = string.strip(web.input().get("url"))
         controller.add_feed(url, user.get_username())
 
@@ -230,7 +230,7 @@ class Login:
         if user:
             web.seeother(web.ctx.homedomain + "/")
             return
-        
+
         return render.login(users, msg)
 
 class LoginHandler:
@@ -276,11 +276,11 @@ class Notify:
 
         email = web.input()["email"]
 
-        dbimpl.update("insert into notify values (%s)", (email, ))
-        dbimpl.conn.commit()
-        
+        # cpool.update does commit for us
+        dbimpl.connpool.update("insert into notify values (%s)", (email, ))
+
         web.seeother(web.ctx.homedomain + "/login,notify")
-        
+
 class Logout:
     def GET(self):
         nocache()
@@ -306,9 +306,9 @@ class ResetPassword:
         users.set_password(username, password)
         controller.send_user_password(username, email, password)
         return "<p>Your password has been reset. You will receive it by email."
-    
+
 class AddFave:
-    def POST(self):        
+    def POST(self):
         title = string.strip(web.input().get("title") or "").decode("utf-8")
         url = string.strip(web.input().get("url") or "").decode("utf-8")
         desc = string.strip(web.input().get("desc") or "").decode("utf-8")
@@ -316,7 +316,7 @@ class AddFave:
         if not title or not url:
             print "<p>Title and URL are required. Try again.</p>"
             return
-        
+
         i = rsslib.Item(feeddb.get_faves())
         i.set_title(title)
         i.set_link(url)
@@ -344,7 +344,7 @@ class FaveForm:
             title = item.get_title()
             url = item.get_link()
             desc = attrescape(item.get_description() or "")
-            
+
         print "<h1>Add fave</h1>"
         print '<p><form method=post action="/addfave">'
         print '<table>'
@@ -456,7 +456,7 @@ class DeleteUser:
 
     def POST(self, key):
         controller.delete_user(key)
-        
+
 # --- ADMIN PAGES
 
 def admin_only(user):
@@ -472,9 +472,9 @@ class Stats:
         admin_only(user)
 
         return render.stats(feeddb)
-        
+
 # --- SETUP
-        
+
 web.config.debug = False
 #web.webapi.internalerror = web.debugerror
 
@@ -514,6 +514,6 @@ if __name__ == "__main__":
 else:
     #this is for mod_python
     #main = web.application(urls, globals()).wsgifunc()
-    
+
     # this is for mod_wsgi
     application = app.wsgifunc()
